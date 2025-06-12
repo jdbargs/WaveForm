@@ -1,211 +1,248 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, FlatList, Dimensions, StyleSheet, TouchableOpacity } from 'react-native';
+// components/MyPostsScreen.js
+import React, { useEffect, useState, useRef, useCallback, useLayoutEffect } from 'react';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  Dimensions,
+  StyleSheet,
+  TouchableOpacity,
+} from 'react-native';
 import { Audio } from 'expo-av';
 import { supabase } from '../lib/supabase';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
 const SCREEN_HEIGHT = WINDOW_HEIGHT - 80;
 
 export default function MyPostsScreen() {
+  const navigation = useNavigation();
+  // Set tab label to "My Profile"
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: 'My Profile' });
+  }, [navigation]);
+
+  // Username state
+  const [username, setUsername] = useState('');
+  const [userId, setUserId] = useState(null);
+
+  // Fetch current user and username
+  useEffect(() => {
+    const fetchUser = async () => {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.error('Error fetching auth user:', userError);
+        return;
+      }
+      setUserId(user.id);
+
+      // Fetch profile username
+      const { data, error } = await supabase
+        .from('users')
+        .select('username')
+        .eq('id', user.id)
+        .single();
+      if (error) {
+        console.error('Error fetching username:', error);
+      } else {
+        setUsername(data.username);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  // Save updated username
+  const handleUsernameSave = async () => {
+    if (!userId) return;
+    const { error } = await supabase
+      .from('users')
+      .update({ username })
+      .eq('id', userId);
+    if (error) console.error('Error updating username:', error);
+  };
+
+  // Posts and audio playback state
   const [posts, setPosts] = useState([]);
+  const postsRef = useRef(posts);
   const [playingIndex, setPlayingIndex] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const soundRef = useRef(null);
   const isFocused = useIsFocused();
 
+  // Fetch user's posts
   useEffect(() => {
-    (async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-        });
-      } catch (e) {
-        console.warn('Failed to set audio mode:', e);
-      }
-    })();
-  }, []);
+    postsRef.current = posts;
+  }, [posts]);
 
-  useEffect(() => {
-    if (isFocused) fetchUserPosts();
-    return () => {
-      unloadSound();
-    };
-  }, [isFocused]);
-
-  const fetchUserPosts = async () => {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData?.user?.id) {
-      console.error('User not authenticated', userError);
-      return;
-    }
-
-    const userId = userData.user.id;
-
-    const { data, error } = await supabase
+  const fetchPosts = useCallback(async () => {
+    const {
+      data,
+      error,
+    } = await supabase
       .from('posts')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-
     if (error) {
-      console.error('Error fetching user posts:', error);
+      console.error('Error fetching posts:', error);
     } else {
       setPosts(data);
     }
-  };
+  }, [userId]);
 
-  const unloadSound = async () => {
-    if (soundRef.current) {
-      try {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-      } catch (err) {
-        console.warn('Error unloading sound:', err);
-      }
-      soundRef.current = null;
+  // Reload when screen focused or userId changes
+  useEffect(() => {
+    if (isFocused && userId) {
+      fetchPosts();
     }
-  };
+  }, [isFocused, userId, fetchPosts]);
 
-  const playSoundAtIndex = async (index) => {
-    if (index < 0 || index >= posts.length) return;
-
-    const uri = posts[index].audio_url;
-    if (!uri) return;
-
+  // Play/pause logic
+  const handlePlayPause = async (uri, index) => {
     try {
-      if (playingIndex !== null && playingIndex !== index) {
-        await unloadSound(); // Stop previous sound before starting new
-      }
-
-      if (playingIndex === index && isPlaying) {
-        // Already playing this audio
-        return;
-      }
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true }
-      );
-      soundRef.current = sound;
-      setPlayingIndex(index);
-      setIsPlaying(true);
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (!status.isPlaying && !status.isBuffering) {
-          setIsPlaying(false);
-          setPlayingIndex(null);
-        }
-      });
-    } catch (err) {
-      console.error('Playback error:', err);
-      setIsPlaying(false);
-      setPlayingIndex(null);
-    }
-  };
-
-  const pauseSound = async () => {
-    if (soundRef.current && isPlaying) {
-      try {
+      if (!soundRef.current) {
+        const { sound } = await Audio.Sound.createAsync({ uri });
+        soundRef.current = sound;
+        await soundRef.current.playAsync();
+        setPlayingIndex(index);
+        setIsPlaying(true);
+      } else if (isPlaying && playingIndex === index) {
         await soundRef.current.pauseAsync();
         setIsPlaying(false);
-      } catch (err) {
-        console.error('Pause error:', err);
+      } else {
+        await soundRef.current.stopAsync();
+        setPlayingIndex(null);
+        const { sound } = await Audio.Sound.createAsync({ uri });
+        soundRef.current = sound;
+        await soundRef.current.playAsync();
+        setPlayingIndex(index);
+        setIsPlaying(true);
       }
+    } catch (error) {
+      console.error('Audio playback error:', error);
     }
   };
 
-  const togglePlayPause = async (index) => {
-    if (playingIndex === index && isPlaying) {
-      await pauseSound();
-    } else {
-      await playSoundAtIndex(index);
-    }
-  };
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
 
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems.length === 0) return;
-    const index = viewableItems[0].index;
-    if (index === undefined || index < 0 || index >= posts.length) return;
-    if (index !== playingIndex) {
-      playSoundAtIndex(index);
-    }
-  });
-
-  const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 80,
-  });
-
+  // Render each post row
   const renderItem = ({ item, index }) => (
-    <View style={styles.page}>
-      <Text style={styles.audioLabel}>🎧 Your Post</Text>
-      <Text style={styles.url}>{item.audio_url}</Text>
+    <View style={styles.postRow}>
       <TouchableOpacity
-        onPress={() => togglePlayPause(index)}
         style={[
-          styles.playPauseButton,
-          playingIndex === index && isPlaying ? styles.playingButton : null,
+          styles.playButton,
+          playingIndex === index && isPlaying && styles.playingButton,
         ]}
+        onPress={() => handlePlayPause(item.audio_url, index)}
       >
         <Text style={styles.playPauseText}>
-          {playingIndex === index && isPlaying ? 'Pause' : 'Play'}
+          {playingIndex === index && isPlaying ? '❚❚' : '▶'}
         </Text>
       </TouchableOpacity>
+      <Text style={styles.postText}>{item.caption}</Text>
     </View>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
-      <FlatList
-        data={posts}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
-        onViewableItemsChanged={onViewableItemsChanged.current}
-        viewabilityConfig={viewabilityConfig.current}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        getItemLayout={(data, index) => ({
-          length: SCREEN_HEIGHT,
-          offset: SCREEN_HEIGHT * index,
-          index,
-        })}
-      />
-    </View>
+    <SafeAreaView style={styles.safeArea}>
+      {/* Header with editable username and post count */}
+      <View style={styles.header}>
+        <TextInput
+          style={styles.usernameInput}
+          value={username}
+          onChangeText={setUsername}
+          onBlur={handleUsernameSave}
+          placeholder="Username"
+          placeholderTextColor="#888"
+        />
+        <Text style={styles.postCount}>{posts.length} posts</Text>
+      </View>
+
+      {/* Posts list */}
+      <View style={styles.container}>
+        <FlatList
+          data={posts}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 80 }}
+          style={{ height: SCREEN_HEIGHT }}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  page: {
-    height: SCREEN_HEIGHT,
-    justifyContent: 'center',
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-  },
-  audioLabel: {
-    color: '#fff',
-    fontSize: 22,
-    marginBottom: 12,
-  },
-  url: {
-    color: '#888',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  playPauseButton: {
-    backgroundColor: '#1DB954',
-    paddingHorizontal: 24,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     paddingVertical: 12,
+    borderBottomColor: '#222',
+    borderBottomWidth: 1,
+  },
+  usernameInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    borderBottomColor: '#444',
+    borderBottomWidth: 1,
+    paddingVertical: 4,
+    marginRight: 12,
+  },
+  postCount: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  postRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomColor: '#222',
+    borderBottomWidth: 1,
+  },
+  playButton: {
+    backgroundColor: '#444',
+    padding: 12,
     borderRadius: 24,
+    marginRight: 12,
   },
   playingButton: {
-    backgroundColor: '#1ed760', // brighter green when playing
+    backgroundColor: '#1ed760',
   },
   playPauseText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 24,
     fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  postText: {
+    color: '#fff',
+    flex: 1,
+    fontSize: 16,
   },
 });
