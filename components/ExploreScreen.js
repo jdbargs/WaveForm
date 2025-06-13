@@ -4,16 +4,18 @@ import {
   SafeAreaView,
   View,
   Text,
-  StyleSheet,
   TextInput,
   FlatList,
-  TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  StyleSheet,
 } from 'react-native';
 import { supabase, followUser, unfollowUser } from '../lib/supabase';
 import { useIsFocused } from '@react-navigation/native';
+import { useTheme } from '../ThemeContext';
+import Win95Button from './Win95Button';
 
 export default function ExploreScreen() {
+  const t = useTheme();                  // <-- make sure ThemeContext.js exports this
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState([]);
   const [followingIds, setFollowingIds] = useState(new Set());
@@ -21,108 +23,115 @@ export default function ExploreScreen() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const isFocused = useIsFocused();
 
-  // 1) Fetch current user and their follow list
   useEffect(() => {
     const fetchCurrentUserAndFollows = async () => {
-      const {
-        data: { user },
-        error: userError
-      } = await supabase.auth.getUser();
-      if (userError || !user) {
-        console.error('Error fetching current user:', userError);
-        return;
-      }
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) return;
       setCurrentUserId(user.id);
 
       const { data: followData, error: followError } = await supabase
         .from('follows')
         .select('followed_id')
         .eq('follower_id', user.id);
-
-      if (followError) {
-        console.error('Error fetching follow list:', followError);
-      } else {
+      if (!followError && followData) {
         setFollowingIds(new Set(followData.map(f => f.followed_id)));
       }
     };
     fetchCurrentUserAndFollows();
   }, [isFocused]);
 
-  // 2) Fetch users matching the search query (by username OR email)
   useEffect(() => {
     const fetchUsers = async () => {
-      const trimmed = searchQuery.trim();
-      if (!trimmed) {
+      const q = searchQuery.trim();
+      if (!q) {
         setUsers([]);
         return;
       }
       setLoading(true);
-
-      console.log(`[Explore] Searching for "${trimmed}" (exclude: ${currentUserId})`);
-
       let query = supabase
         .from('users')
         .select('id, username, email')
-        .or(`username.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
+        .or(`username.ilike.%${q}%,email.ilike.%${q}%`)
         .limit(50);
-
-      if (currentUserId) {
-        query = query.neq('id', currentUserId);
-      }
-
+      if (currentUserId) query = query.neq('id', currentUserId);
       const { data, error } = await query;
-      console.log('[Explore] fetchUsers result:', data, error);
-
-      if (error) {
-        console.error('Error searching users:', error);
-        setUsers([]);
-      } else {
-        setUsers(data);
-      }
+      if (data) setUsers(data);
+      else console.error(error);
       setLoading(false);
     };
-
-    const handler = setTimeout(fetchUsers, 300); // debounce
-    return () => clearTimeout(handler);
+    const timer = setTimeout(fetchUsers, 300);
+    return () => clearTimeout(timer);
   }, [searchQuery, currentUserId]);
 
-  // 3) Toggle follow/unfollow
-  const handleFollowToggle = async (userId) => {
+  const handleFollowToggle = async id => {
     try {
-      if (followingIds.has(userId)) {
-        await unfollowUser(currentUserId, userId);
-        const updated = new Set(followingIds);
-        updated.delete(userId);
-        setFollowingIds(updated);
+      if (followingIds.has(id)) {
+        await unfollowUser(currentUserId, id);
+        const s = new Set(followingIds); s.delete(id); setFollowingIds(s);
       } else {
-        await followUser(currentUserId, userId);
-        const updated = new Set(followingIds);
-        updated.add(userId);
-        setFollowingIds(updated);
+        await followUser(currentUserId, id);
+        const s = new Set(followingIds); s.add(id); setFollowingIds(s);
       }
-    } catch (err) {
-      console.error('Follow toggle error:', err);
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  // 4) Render each user row
+  const styles = StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.colors.background },
+    container: { flex: 1, padding: t.spacing.md },
+    input: {
+      height: t.dimensions.buttonHeight,
+      borderWidth: t.border.width,
+      borderColor: t.colors.buttonShadow,
+      backgroundColor: t.colors.buttonFace,
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body,
+      paddingHorizontal: t.spacing.sm,
+      marginBottom: t.spacing.md,
+    },
+    loading: { marginVertical: t.spacing.sm },
+    noResults: {
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body,
+      textAlign: 'center',
+      marginTop: t.spacing.lg,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: t.spacing.sm,
+      borderBottomWidth: t.border.width,
+      borderBottomColor: t.colors.buttonShadow,
+    },
+    userInfo: { flex: 1, marginRight: t.spacing.md },
+    username: {
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body,
+      fontWeight: t.font.weight.bold,
+    },
+    email: {
+      color: t.colors.accentBlue,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.caption,
+      marginTop: t.spacing.xs,
+    },
+  });
+
   const renderItem = ({ item }) => (
-    <View style={styles.userRow}>
+    <View style={styles.row}>
       <View style={styles.userInfo}>
         <Text style={styles.username}>{item.username}</Text>
         <Text style={styles.email}>{item.email}</Text>
       </View>
-      <TouchableOpacity
+      <Win95Button
+        title={followingIds.has(item.id) ? 'Unfollow' : 'Follow'}
         onPress={() => handleFollowToggle(item.id)}
-        style={[
-          styles.button,
-          followingIds.has(item.id) ? styles.unfollowButton : styles.followButton
-        ]}
-      >
-        <Text style={styles.buttonText}>
-          {followingIds.has(item.id) ? 'Unfollow' : 'Follow'}
-        </Text>
-      </TouchableOpacity>
+      />
     </View>
   );
 
@@ -131,18 +140,17 @@ export default function ExploreScreen() {
       <View style={styles.container}>
         <TextInput
           placeholder="Search users..."
-          placeholderTextColor="#888"
+          placeholderTextColor={t.colors.accentBlue}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          style={styles.searchInput}
+          style={styles.input}
           autoCapitalize="none"
         />
-        {loading && <ActivityIndicator color="#fff" style={styles.loading} />}
+        {loading && <ActivityIndicator color={t.colors.text} style={styles.loading} />}
         <FlatList
           data={users}
-          keyExtractor={(item) => item.id}
+          keyExtractor={u => u.id}
           renderItem={renderItem}
-          contentContainerStyle={{ flexGrow: 1 }}
           ListEmptyComponent={
             !loading && searchQuery.trim() ? (
               <Text style={styles.noResults}>No users found.</Text>
@@ -153,70 +161,3 @@ export default function ExploreScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#000'
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    padding: 16
-  },
-  searchInput: {
-    height: 40,
-    borderColor: '#444',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    color: '#fff',
-    marginTop: 32,
-    marginBottom: 12
-  },
-  loading: {
-    marginVertical: 10
-  },
-  noResults: {
-    color: '#fff',
-    textAlign: 'center',
-    marginTop: 20
-  },
-  userRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomColor: '#222',
-    borderBottomWidth: 1
-  },
-  userInfo: {
-    flex: 1,
-    marginRight: 12
-  },
-  username: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold'
-  },
-  email: {
-    color: '#888',
-    fontSize: 14,
-    marginTop: 2
-  },
-  button: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20
-  },
-  followButton: {
-    backgroundColor: '#1DB954'
-  },
-  unfollowButton: {
-    backgroundColor: '#333'
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 14
-  }
-});

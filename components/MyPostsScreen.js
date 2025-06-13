@@ -8,17 +8,21 @@ import {
   FlatList,
   Dimensions,
   StyleSheet,
-  TouchableOpacity,
+  Alert
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { supabase } from '../lib/supabase';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { useTheme } from '../ThemeContext';
+import Win95Button from './Win95Button';
 
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
 const SCREEN_HEIGHT = WINDOW_HEIGHT - 80;
 
 export default function MyPostsScreen() {
   const navigation = useNavigation();
+  const t = useTheme();
+
   // Set tab label to "My Profile"
   useLayoutEffect(() => {
     navigation.setOptions({ title: 'My Profile' });
@@ -33,7 +37,7 @@ export default function MyPostsScreen() {
     const fetchUser = async () => {
       const {
         data: { user },
-        error: userError,
+        error: userError
       } = await supabase.auth.getUser();
       if (userError || !user) {
         console.error('Error fetching auth user:', userError);
@@ -68,22 +72,15 @@ export default function MyPostsScreen() {
 
   // Posts and audio playback state
   const [posts, setPosts] = useState([]);
-  const postsRef = useRef(posts);
   const [playingIndex, setPlayingIndex] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const soundRef = useRef(null);
   const isFocused = useIsFocused();
 
   // Fetch user's posts
-  useEffect(() => {
-    postsRef.current = posts;
-  }, [posts]);
-
   const fetchPosts = useCallback(async () => {
-    const {
-      data,
-      error,
-    } = await supabase
+    if (!userId) return;
+    const { data, error } = await supabase
       .from('posts')
       .select('*')
       .eq('user_id', userId)
@@ -108,7 +105,7 @@ export default function MyPostsScreen() {
       if (!soundRef.current) {
         const { sound } = await Audio.Sound.createAsync({ uri });
         soundRef.current = sound;
-        await soundRef.current.playAsync();
+        await sound.playAsync();
         setPlayingIndex(index);
         setIsPlaying(true);
       } else if (isPlaying && playingIndex === index) {
@@ -116,16 +113,41 @@ export default function MyPostsScreen() {
         setIsPlaying(false);
       } else {
         await soundRef.current.stopAsync();
-        setPlayingIndex(null);
         const { sound } = await Audio.Sound.createAsync({ uri });
         soundRef.current = sound;
-        await soundRef.current.playAsync();
+        await sound.playAsync();
         setPlayingIndex(index);
         setIsPlaying(true);
       }
     } catch (error) {
       console.error('Audio playback error:', error);
     }
+  };
+
+  // Delete a post
+  const handleDelete = (postId) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase
+              .from('posts')
+              .delete()
+              .eq('id', postId);
+            if (error) {
+              console.error('Delete error:', error);
+            } else {
+              fetchPosts();
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Cleanup on unmount
@@ -137,21 +159,73 @@ export default function MyPostsScreen() {
     };
   }, []);
 
+  // Styles with theme
+  const styles = StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: t.colors.background },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: t.colors.buttonFace,
+      borderBottomWidth: t.border.width,
+      borderBottomColor: t.colors.buttonShadow,
+      paddingHorizontal: t.spacing.md,
+      paddingVertical: t.spacing.sm
+    },
+    usernameInput: {
+      flex: 1,
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.header,
+      fontWeight: t.font.weight.bold,
+      borderBottomWidth: t.border.width,
+      borderBottomColor: t.colors.buttonShadow,
+      paddingVertical: t.spacing.xs,
+      marginRight: t.spacing.sm
+    },
+    postCount: {
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body
+    },
+    container: {
+      flex: 1,
+      backgroundColor: t.colors.background,
+      paddingHorizontal: t.spacing.md,
+      paddingTop: t.spacing.sm
+    },
+    postRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderBottomWidth: t.border.width,
+      borderBottomColor: t.colors.buttonShadow,
+      paddingVertical: t.spacing.sm
+    },
+    postText: {
+      flex: 1,
+      marginLeft: t.spacing.sm,
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body
+    },
+    actionButtons: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginLeft: t.spacing.sm
+    }
+  });
+
   // Render each post row
   const renderItem = ({ item, index }) => (
     <View style={styles.postRow}>
-      <TouchableOpacity
-        style={[
-          styles.playButton,
-          playingIndex === index && isPlaying && styles.playingButton,
-        ]}
+      <Win95Button
+        title={playingIndex === index && isPlaying ? '❚❚' : '▶'}
         onPress={() => handlePlayPause(item.audio_url, index)}
-      >
-        <Text style={styles.playPauseText}>
-          {playingIndex === index && isPlaying ? '❚❚' : '▶'}
-        </Text>
-      </TouchableOpacity>
+      />
       <Text style={styles.postText}>{item.caption}</Text>
+      <View style={styles.actionButtons}>
+        <Win95Button title="Delete" onPress={() => handleDelete(item.id)} />
+      </View>
     </View>
   );
 
@@ -165,7 +239,7 @@ export default function MyPostsScreen() {
           onChangeText={setUsername}
           onBlur={handleUsernameSave}
           placeholder="Username"
-          placeholderTextColor="#888"
+          placeholderTextColor={t.colors.text}
         />
         <Text style={styles.postCount}>{posts.length} posts</Text>
       </View>
@@ -176,73 +250,9 @@ export default function MyPostsScreen() {
           data={posts}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 80 }}
           style={{ height: SCREEN_HEIGHT }}
         />
       </View>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomColor: '#222',
-    borderBottomWidth: 1,
-  },
-  usernameInput: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    borderBottomColor: '#444',
-    borderBottomWidth: 1,
-    paddingVertical: 4,
-    marginRight: 12,
-  },
-  postCount: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  postRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomColor: '#222',
-    borderBottomWidth: 1,
-  },
-  playButton: {
-    backgroundColor: '#444',
-    padding: 12,
-    borderRadius: 24,
-    marginRight: 12,
-  },
-  playingButton: {
-    backgroundColor: '#1ed760',
-  },
-  playPauseText: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  postText: {
-    color: '#fff',
-    flex: 1,
-    fontSize: 16,
-  },
-});

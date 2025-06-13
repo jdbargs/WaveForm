@@ -1,65 +1,99 @@
 // components/AuthScreen.js
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Alert
+} from 'react-native';
 import { supabase } from '../lib/supabase';
+import { useTheme } from '../ThemeContext';
+import Win95Button from './Win95Button';
 
 export default function AuthScreen() {
+  const t = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleSignUp = async () => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) alert(error.message);
-    else alert('Check your email to confirm your signup!');
-  };
-
   const handleSignIn = async () => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert(error.message);
+    if (error) {
+      Alert.alert('Sign In Error', error.message);
+    }
   };
 
+  const handleSignUp = async () => {
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      Alert.alert('Sign Up Error', error.message);
+    } else {
+      Alert.alert('Almost there!', 'Check your email to confirm signup.');
+    }
+  };
+
+  const styles = StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: t.colors.background
+    },
+    container: {
+      flex: 1,
+      padding: t.spacing.md,
+      justifyContent: 'center'
+    },
+    title: {
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.header,
+      color: t.colors.text,
+      textAlign: 'center',
+      marginBottom: t.spacing.lg
+    },
+    input: {
+      height: t.dimensions.buttonHeight,
+      borderWidth: t.border.width,
+      borderColor: t.colors.buttonShadow,
+      backgroundColor: t.colors.buttonFace,
+      color: t.colors.text,
+      marginBottom: t.spacing.sm,
+      paddingHorizontal: t.spacing.sm,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body
+    },
+    buttonContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: t.spacing.md
+    }
+  });
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome to WaveForm</Text>
-      <TextInput
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        style={styles.input}
-      />
-      <View style={styles.buttonContainer}>
-        <Button title="Sign In" onPress={handleSignIn} />
-        <Button title="Sign Up" onPress={handleSignUp} />
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        <Text style={styles.title}>Welcome to WaveForm</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor={t.colors.accentBlue}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor={t.colors.accentBlue}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+        />
+        <View style={styles.buttonContainer}>
+          <Win95Button title="Sign In" onPress={handleSignIn} />
+          <Win95Button title="Sign Up" onPress={handleSignUp} />
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { 
-    padding: 20, 
-    marginTop: 100,
-    backgroundColor: 'white', },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  input: {
-    height: 40,
-    borderColor: '#999',
-    borderWidth: 1,
-    marginBottom: 10,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-  },
-  buttonContainer: {
-    marginTop: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-});
