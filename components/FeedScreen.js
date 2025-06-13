@@ -25,10 +25,25 @@ export default function FeedScreen() {
   const soundRef = useRef(null);
   const isFocused = useIsFocused();
 
-  // Sync ref
-  useEffect(() => { postsRef.current = posts; }, [posts]);
+  // Viewability config for autoplay
+  const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 80 });
 
-  // Enable silent mode playback
+  // Autoplay when a new item comes into view
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    if (viewableItems.length === 0) return;
+    const idx = viewableItems[0].index;
+    if (idx !== playingIndex) {
+      unloadSound();
+      playSoundAtIndex(idx);
+    }
+  });
+
+  // Keep ref in sync
+  useEffect(() => {
+    postsRef.current = posts;
+  }, [posts]);
+
+  // Allow playback in silent mode
   useEffect(() => {
     (async () => {
       try {
@@ -45,27 +60,28 @@ export default function FeedScreen() {
     return unloadSound;
   }, [isFocused]);
 
+  // Fetch feed posts, including username
   async function fetchFeedPosts() {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) return;
-    const uid = user.id;
+    const { data: authData, error: userError } = await supabase.auth.getUser();
+    if (userError || !authData?.user?.id) return;
+    const uid = authData.user.id;
 
-    const { data: follows } = await supabase
+    const { data: follows = [] } = await supabase
       .from('follows')
       .select('followed_id')
       .eq('follower_id', uid);
-    const ids = follows.map(f => f.followed_id);
-    ids.push(uid);
+    const ids = follows.map(f => f.followed_id).concat(uid);
 
-    const { data: feedPosts } = await supabase
+    const { data: feedPosts = [] } = await supabase
       .from('posts')
-      .select('*')
+      .select('id, audio_url, user_id, users(username)')
       .in('user_id', ids)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
     setPosts(feedPosts);
   }
 
+  // Unload audio
   async function unloadSound() {
     if (soundRef.current) {
       try {
@@ -76,27 +92,31 @@ export default function FeedScreen() {
     }
   }
 
+  // Play at specific index
   async function playSoundAtIndex(index) {
     if (index < 0 || index >= postsRef.current.length) return;
     const uri = postsRef.current[index].audio_url;
     if (!uri) return;
 
-    if (soundRef.current) await unloadSound();
-
-    const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
-    soundRef.current = sound;
-
-    sound.setOnPlaybackStatusUpdate(status => {
-      if (status.isPlaying) {
-        setPlayingIndex(index);
-        setIsPlaying(true);
-      } else if (!status.isPlaying && !status.isBuffering) {
-        setPlayingIndex(null);
-        setIsPlaying(false);
-      }
-    });
+    await unloadSound();
+    try {
+      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+      soundRef.current = sound;
+      sound.setOnPlaybackStatusUpdate(status => {
+        if (status.isPlaying) {
+          setPlayingIndex(index);
+          setIsPlaying(true);
+        } else if (!status.isPlaying && !status.isBuffering) {
+          setPlayingIndex(null);
+          setIsPlaying(false);
+        }
+      });
+    } catch (e) {
+      console.error('Play error:', e);
+    }
   }
 
+  // Toggle play/pause
   function togglePlayPause(index) {
     if (playingIndex === index && isPlaying) {
       soundRef.current?.pauseAsync();
@@ -106,16 +126,19 @@ export default function FeedScreen() {
     }
   }
 
-  const renderItem = ({ item, index }) => (
-    <View style={styles.page}>
-      <Text style={styles.audioLabel}>▶ @{item.user_id}'s Post</Text>
-      <Text style={styles.url}>{item.audio_url}</Text>
-      <Win95Button
-        title={playingIndex === index && isPlaying ? '❚❚' : '▶'}
-        onPress={() => togglePlayPause(index)}
-      />
-    </View>
-  );
+  const renderItem = ({ item, index }) => {
+    const username = item.users?.username || 'Unknown';
+    return (
+      <View style={styles.page}>
+        <Text style={styles.audioLabel}>▶ {username}'s Post</Text>
+        <Text style={styles.url}>{item.audio_url}</Text>
+        <Win95Button
+          title={playingIndex === index && isPlaying ? '❚❚' : '▶'}
+          onPress={() => togglePlayPause(index)}
+        />
+      </View>
+    );
+  };
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: t.colors.background },
@@ -147,10 +170,12 @@ export default function FeedScreen() {
         renderItem={renderItem}
         keyExtractor={item => item.id}
         pagingEnabled
-        showsVerticalScrollIndicator={false}
-        snapToAlignment="start"
+        snapToInterval={SCREEN_HEIGHT}
+        snapToAlignment="center"
         decelerationRate="fast"
-        getItemLayout={(_, i) => ({ length: SCREEN_HEIGHT, offset: SCREEN_HEIGHT * i, index: i })}
+        showsVerticalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged.current}
+        viewabilityConfig={viewConfig.current}
       />
     </View>
   );

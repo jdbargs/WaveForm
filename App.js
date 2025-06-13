@@ -4,29 +4,71 @@ import { v4 as uuidv4 } from 'uuid';
 import React, { useState, useEffect } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { useFonts } from 'expo-font';
-import { NavigationContainer } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  getFocusedRouteNameFromRoute
+} from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { theme } from './theme';
 import FeedScreen from './components/FeedScreen';
 import ExploreScreen from './components/ExploreScreen';
 import MyPostsScreen from './components/MyPostsScreen';
 import RecorderScreen from './components/RecorderScreen';
 import AuthScreen from './components/AuthScreen';
+import MessagesScreen from './components/MessagesScreen';
+import ChatScreen from './components/ChatScreen';
 import { supabase } from './lib/supabase';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ThemeProvider } from './ThemeContext';
+import Win95Button from './components/Win95Button';
 
+// Feed Stack
+const FeedStack = createNativeStackNavigator();
+function FeedStackScreen() {
+  return (
+    <FeedStack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: theme.colors.buttonFace,
+          borderBottomWidth: theme.border.width,
+          borderBottomColor: theme.colors.buttonShadow,
+        },
+        headerTitleStyle: {
+          fontFamily: theme.font.family,
+          fontSize: theme.font.sizes.header,
+          color: theme.colors.text,
+        },
+      }}
+    >
+      <FeedStack.Screen
+        name="FeedMain"
+        component={FeedScreen}
+        options={({ navigation }) => ({
+          title: 'Feed',
+          headerLeft: () => (
+            <Win95Button
+              title="Messages"
+              onPress={() => navigation.navigate('Messages')}
+              style={{ marginLeft: theme.spacing.sm }}
+            />
+          ),
+        })}
+      />
+      <FeedStack.Screen name="Messages" component={MessagesScreen} options={{ title: 'Messages' }} />
+      <FeedStack.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat' }} />
+    </FeedStack.Navigator>
+  );
+}
+
+// Bottom Tabs
 const Tab = createBottomTabNavigator();
-
 export default function App() {
   const [session, setSession] = useState(null);
-
-  // Load pixel font
   const [fontsLoaded] = useFonts({
     PressStart2P: require('./assets/fonts/PressStart2P.ttf'),
   });
 
-  // Supabase session handling
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: listener } = supabase.auth.onAuthStateChange((_, newSession) => setSession(newSession));
@@ -41,53 +83,100 @@ export default function App() {
     );
   }
 
+  const buttonSize = theme.dimensions.buttonHeight * 3;
+  const defaultTabBarStyle = {
+    position: 'absolute',
+    bottom: theme.spacing.sm,
+    left: theme.spacing.sm,
+    right: theme.spacing.sm,
+    backgroundColor: theme.colors.buttonFace,
+    borderTopWidth: theme.border.width,
+    borderTopColor: theme.colors.buttonShadow,
+    height: buttonSize,
+  };
+
+  const commonOptions = {
+    tabBarIcon: ({ color, size }) => {
+      // Determine icon based on route name (handled per screen below)
+      return <Ionicons name={commonOptions.iconName} size={size} color={color} />;
+    },
+    tabBarActiveTintColor: theme.colors.text,
+    tabBarInactiveTintColor: theme.colors.buttonShadow,
+    tabBarItemStyle: {
+      backgroundColor: theme.colors.buttonFace,
+      width: buttonSize,
+      height: buttonSize,
+      marginHorizontal: theme.spacing.xs,
+      borderWidth: theme.border.width,
+      borderColor: theme.colors.buttonShadow,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tabBarLabelStyle: {
+      fontFamily: theme.font.family,
+      fontSize: theme.font.sizes.caption,
+      marginTop: theme.spacing.xs,
+    },
+    headerShown: false,
+  };
+
   return (
     <ThemeProvider>
       <NavigationContainer>
         {!session ? (
           <AuthScreen />
         ) : (
-          <Tab.Navigator
-            screenOptions={({ route }) => ({
-              tabBarIcon: ({ focused, color, size }) => {
-                let iconName;
-                switch (route.name) {
-                  case 'Feed':
-                    iconName = focused ? 'play' : 'play-outline';
-                    break;
-                  case 'Explore':
-                    iconName = focused ? 'search' : 'search-outline';
-                    break;
-                  case 'Post':
-                    iconName = focused ? 'add-circle' : 'add-circle-outline';
-                    break;
-                  case 'My Profile':
-                    iconName = focused ? 'person' : 'person-outline';
-                    break;
-                }
-                return <Ionicons name={iconName} size={size} color={color} />;
-              },
-              tabBarActiveTintColor: theme.colors.text,
-              tabBarInactiveTintColor: theme.colors.buttonShadow,
-              tabBarLabelStyle: {
-                fontFamily: theme.font.family,
-                fontSize: theme.font.sizes.caption,
-              },
-              tabBarStyle: {
-                position: 'absolute',
-                bottom: theme.spacing.sm,
-                backgroundColor: theme.colors.background,
-                borderTopWidth: theme.border.width,
-                borderTopColor: theme.colors.buttonShadow,
-                height: theme.dimensions.buttonHeight * 1.5,
-              },
-              headerShown: false,
-            })}
-          >
-            <Tab.Screen name="Feed" component={FeedScreen} />
-            <Tab.Screen name="Explore" component={ExploreScreen} />
-            <Tab.Screen name="Post" component={RecorderScreen} />
-            <Tab.Screen name="My Profile" component={MyPostsScreen} />
+          <Tab.Navigator>
+            <Tab.Screen
+              name="Feed"
+              component={FeedStackScreen}
+              options={({ route }) => {
+                const nested = getFocusedRouteNameFromRoute(route) ?? 'FeedMain';
+                return {
+                  ...commonOptions,
+                  tabBarIcon: ({ color }) => (
+                    <Ionicons name="play-outline" size={14} color={color} />
+                  ),
+                  tabBarStyle:
+                    nested === 'FeedMain'
+                      ? defaultTabBarStyle
+                      : { display: 'none' },
+                };
+              }}
+            />
+            <Tab.Screen
+              name="Explore"
+              component={ExploreScreen}
+              options={{
+                ...commonOptions,
+                tabBarIcon: ({ color }) => (
+                  <Ionicons name="search-outline" size={14} color={color} />
+                ),
+                tabBarStyle: defaultTabBarStyle,
+              }}
+            />
+            <Tab.Screen
+              name="Post"
+              component={RecorderScreen}
+              options={{
+                ...commonOptions,
+                tabBarIcon: ({ color }) => (
+                  <Ionicons name="add-circle-outline" size={14} color={color} />
+                ),
+                tabBarStyle: defaultTabBarStyle,
+              }}
+            />
+            <Tab.Screen
+              name="My Profile"
+              component={MyPostsScreen}
+              options={{
+                ...commonOptions,
+                tabBarIcon: ({ color }) => (
+                  <Ionicons name="person-outline" size={14} color={color} />
+                ),
+                tabBarStyle: defaultTabBarStyle,
+              }}
+            />
           </Tab.Navigator>
         )}
       </NavigationContainer>
