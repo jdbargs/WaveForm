@@ -1,35 +1,59 @@
+// components/DesktopIcon.js
 import React, { useRef, useEffect } from 'react';
-import { View, Animated, PanResponder, Image, Text, TouchableWithoutFeedback } from 'react-native';
+import {
+  View,
+  Animated,
+  PanResponder,
+  Image,
+  Text,
+  TouchableWithoutFeedback
+} from 'react-native';
 
 const ICON_SIZE = 64;
 
-export default function DesktopIcon({ item, onPress, onDragEnd, onDropOnFolder, folderRects = [] }) {
+export default function DesktopIcon({
+  item,
+  onPress,
+  onDragEnd,
+  onDropOnFolder,
+  onTrashDrop,
+  folderRects = [],
+  trashRect
+}) {
   // Animated value for position
   const pan = useRef(new Animated.ValueXY(item.position)).current;
 
-  // Update position when item.position prop changes
+  // Sync to prop changes
   useEffect(() => {
     pan.setValue(item.position);
   }, [item.position]);
 
-  // Helpers for drop detection
+  // Helpers to test a point against a rect
+  const isPointInRect = (x, y, rect) =>
+    x >= rect.x &&
+    x <= rect.x + rect.width &&
+    y >= rect.y &&
+    y <= rect.y + rect.height;
+
   const isOverFolder = (pos) => {
-    const centerX = pos.x + ICON_SIZE / 2;
-    const centerY = pos.y + ICON_SIZE / 2;
-    return folderRects.find(
-      (rect) =>
-        centerX >= rect.x &&
-        centerX <= rect.x + rect.width &&
-        centerY >= rect.y &&
-        centerY <= rect.y + rect.height
-    );
+    const cx = pos.x + ICON_SIZE / 2;
+    const cy = pos.y + ICON_SIZE / 2;
+    return folderRects.find((r) => isPointInRect(cx, cy, r));
   };
 
-  // PanResponder for drag behavior
+  const isOverTrash = (pos) => {
+    if (!trashRect) return false;
+    const cx = pos.x + ICON_SIZE / 2;
+    const cy = pos.y + ICON_SIZE / 2;
+    return isPointInRect(cx, cy, trashRect);
+  };
+
+  // PanResponder for dragging
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+
       onPanResponderGrant: () => {
         pan.setOffset({ x: pan.x._value, y: pan.y._value });
         pan.setValue({ x: 0, y: 0 });
@@ -41,21 +65,26 @@ export default function DesktopIcon({ item, onPress, onDragEnd, onDropOnFolder, 
       onPanResponderRelease: () => {
         pan.flattenOffset();
         const newPos = { x: pan.x._value, y: pan.y._value };
-        // If dropping over a folder, notify parent
-        if (item.type === 'file') {
-          const folder = isOverFolder(newPos);
-          if (folder) {
-            onDropOnFolder(item.id, folder.id);
-            return;
-          }
+
+        // 1) Trash drop?
+        if (isOverTrash(newPos)) {
+          onTrashDrop(item.id, item.type);
+          return;
         }
-        // Otherwise, just update position
+
+        // 2) Folder drop?
+        const folder = isOverFolder(newPos);
+        if (folder) {
+          onDropOnFolder(item.id, folder.id);
+          return;
+        }
+
+        // 3) Otherwise, just reposition
         onDragEnd(item.id, newPos);
       }
     })
   ).current;
 
-  // Render icon at animated position
   return (
     <Animated.View
       {...panResponder.panHandlers}
