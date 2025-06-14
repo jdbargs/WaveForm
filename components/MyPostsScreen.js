@@ -1,11 +1,15 @@
-// components/MyPostsScreen.js
-import React, { useEffect, useState, useRef, useCallback, useLayoutEffect } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useLayoutEffect
+} from 'react';
 import {
   SafeAreaView,
   View,
   Text,
   TextInput,
-  FlatList,
   Dimensions,
   StyleSheet,
   Alert
@@ -15,52 +19,48 @@ import { supabase } from '../lib/supabase';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../ThemeContext';
 import Win95Button from './Win95Button';
+import DesktopIcon from './DesktopIcon';
 
-const { height: WINDOW_HEIGHT } = Dimensions.get('window');
+const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
 const SCREEN_HEIGHT = WINDOW_HEIGHT - 80;
+const ICON_SIZE = 64;
 
 export default function MyPostsScreen() {
   const navigation = useNavigation();
   const t = useTheme();
 
-  // Set tab label to "My Profile"
+  // Set tab title
   useLayoutEffect(() => {
     navigation.setOptions({ title: 'My Profile' });
   }, [navigation]);
 
-  // Username state
+  // Auth / profile
   const [username, setUsername] = useState('');
   const [userId, setUserId] = useState(null);
 
-  // Fetch current user and username
   useEffect(() => {
     const fetchUser = async () => {
       const {
         data: { user },
-        error: userError
+        error: userErr
       } = await supabase.auth.getUser();
-      if (userError || !user) {
-        console.error('Error fetching auth user:', userError);
+      if (userErr || !user) {
+        console.error('Error fetching auth user:', userErr);
         return;
       }
       setUserId(user.id);
 
-      // Fetch profile username
       const { data, error } = await supabase
         .from('users')
         .select('username')
         .eq('id', user.id)
         .single();
-      if (error) {
-        console.error('Error fetching username:', error);
-      } else {
-        setUsername(data.username);
-      }
+      if (error) console.error('Error fetching username:', error);
+      else setUsername(data.username);
     };
     fetchUser();
   }, []);
 
-  // Save updated username
   const handleUsernameSave = async () => {
     if (!userId) return;
     const { error } = await supabase
@@ -70,14 +70,11 @@ export default function MyPostsScreen() {
     if (error) console.error('Error updating username:', error);
   };
 
-  // Posts and audio playback state
+  // Posts & folders state
   const [posts, setPosts] = useState([]);
-  const [playingIndex, setPlayingIndex] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const soundRef = useRef(null);
+  const [folders, setFolders] = useState([]);
   const isFocused = useIsFocused();
 
-  // Fetch user's posts
   const fetchPosts = useCallback(async () => {
     if (!userId) return;
     const { data, error } = await supabase
@@ -85,21 +82,93 @@ export default function MyPostsScreen() {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    if (error) {
-      console.error('Error fetching posts:', error);
-    } else {
-      setPosts(data);
+    if (error) console.error('Error fetching posts:', error);
+    else {
+      setPosts(
+        data.map((p, i) => ({
+          ...p,
+          parentFolderId: p.folder_id ?? null,
+          position:
+            p.position ?? { x: (i % 4) * 100 + 20, y: Math.floor(i / 4) * 120 + 20 },
+          type: 'file'
+        }))
+      );
     }
   }, [userId]);
 
-  // Reload when screen focused or userId changes
+  const fetchFolders = useCallback(async () => {
+    if (!userId) return;
+    const { data, error } = await supabase
+      .from('folders')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) console.error('Error fetching folders:', error);
+    else {
+      setFolders(
+        data.map((f, i) => ({
+          ...f,
+          parentFolderId: f.parent_folder_id,
+          position:
+            f.position ?? { x: (i % 4) * 100 + 20, y: Math.floor(i / 4) * 120 + 20 },
+          type: 'folder'
+        }))
+      );
+    }
+  }, [userId]);
+
   useEffect(() => {
     if (isFocused && userId) {
       fetchPosts();
+      fetchFolders();
     }
-  }, [isFocused, userId, fetchPosts]);
+  }, [isFocused, userId, fetchPosts, fetchFolders]);
 
-  // Play/pause logic
+  // Desktop navigation stack
+  const [folderStack, setFolderStack] = useState([null]);
+  const currentFolderId = folderStack[folderStack.length - 1];
+
+  const goUp = () => {
+    if (folderStack.length > 1) setFolderStack((s) => s.slice(0, -1));
+  };
+
+  // Create new folder
+  const createFolder = async () => {
+    if (!userId) return;
+    // Random position within screen bounds
+    const defaultPos = {
+      x: Math.random() * (WINDOW_WIDTH - ICON_SIZE),
+      y: Math.random() * (SCREEN_HEIGHT - ICON_SIZE)
+    };
+    const { data: newFolder, error } = await supabase
+      .from('folders')
+      .insert({
+        name: 'New Folder',
+        user_id: userId,
+        parent_folder_id: currentFolderId,
+        position: defaultPos
+      })
+      .select('*')
+      .single();
+    if (error) console.error('Error creating folder:', error);
+    else {
+      setFolders((prev) => [
+        ...prev,
+        {
+          ...newFolder,
+          parentFolderId: newFolder.parent_folder_id,
+          position: newFolder.position,
+          type: 'folder'
+        }
+      ]);
+    }
+  };
+
+  // Audio playback
+  const soundRef = useRef(null);
+  const [playingIndex, setPlayingIndex] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
   const handlePlayPause = async (uri, index) => {
     try {
       if (!soundRef.current) {
@@ -119,47 +188,96 @@ export default function MyPostsScreen() {
         setPlayingIndex(index);
         setIsPlaying(true);
       }
-    } catch (error) {
-      console.error('Audio playback error:', error);
+    } catch (err) {
+      console.error('Audio error:', err);
     }
   };
 
-  // Delete a post
-  const handleDelete = (postId) => {
-    Alert.alert(
-      'Delete Post',
-      'Are you sure you want to delete this post?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('posts')
-              .delete()
-              .eq('id', postId);
-            if (error) {
-              console.error('Delete error:', error);
-            } else {
-              fetchPosts();
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
+      if (soundRef.current) soundRef.current.unloadAsync();
     };
   }, []);
 
-  // Styles with theme
+  // Delete post
+  const handleDelete = (postId) => {
+    Alert.alert('Delete Post', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          const { error } = await supabase
+            .from('posts')
+            .delete()
+            .eq('id', postId);
+          if (error) console.error('Delete error:', error);
+          else fetchPosts();
+        }
+      }
+    ]);
+  };
+
+  // Drag & drop handlers
+  const updatePosition = async (id, newPos, type) => {
+    if (type === 'file') {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, position: newPos } : p))
+      );
+      const { error } = await supabase
+        .from('posts')
+        .update({ position: newPos })
+        .eq('id', id);
+      if (error) console.error('Error updating position:', error);
+    } else {
+      setFolders((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, position: newPos } : f))
+      );
+      const { error } = await supabase
+        .from('folders')
+        .update({ position: newPos })
+        .eq('id', id);
+      if (error) console.error('Error updating folder position:', error);
+    }
+  };
+
+  const moveIntoFolder = async (id, folderId, type) => {
+    if (type === 'file') {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, parentFolderId: folderId } : p))
+      );
+      const { error } = await supabase
+        .from('posts')
+        .update({ folder_id: folderId })
+        .eq('id', id);
+      if (error) console.error('Error moving post:', error);
+    } else {
+      setFolders((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, parentFolderId: folderId } : f))
+      );
+      const { error } = await supabase
+        .from('folders')
+        .update({ parent_folder_id: folderId })
+        .eq('id', id);
+      if (error) console.error('Error moving folder:', error);
+    }
+  };
+
+  // Visible items
+  const visibleFolders = folders.filter((f) => f.parentFolderId === currentFolderId);
+  const visiblePosts = posts.filter((p) => p.parentFolderId === currentFolderId);
+  const visibleItems = [...visibleFolders, ...visiblePosts];
+
+  // Compute folder rects
+  const folderRects = visibleFolders.map((f) => ({
+    id: f.id,
+    x: f.position.x,
+    y: f.position.y,
+    width: ICON_SIZE,
+    height: ICON_SIZE
+  }));
+
+  // Styles
   const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: t.colors.background },
     header: {
@@ -169,8 +287,7 @@ export default function MyPostsScreen() {
       backgroundColor: t.colors.buttonFace,
       borderBottomWidth: t.border.width,
       borderBottomColor: t.colors.buttonShadow,
-      paddingHorizontal: t.spacing.md,
-      paddingVertical: t.spacing.sm
+      padding: t.spacing.sm
     },
     usernameInput: {
       flex: 1,
@@ -180,58 +297,27 @@ export default function MyPostsScreen() {
       fontWeight: t.font.weight.bold,
       borderBottomWidth: t.border.width,
       borderBottomColor: t.colors.buttonShadow,
-      paddingVertical: t.spacing.xs,
       marginRight: t.spacing.sm
     },
-    postCount: {
-      color: t.colors.text,
-      fontFamily: t.font.family,
-      fontSize: t.font.sizes.body
-    },
-    container: {
-      flex: 1,
-      backgroundColor: t.colors.background,
-      paddingHorizontal: t.spacing.md,
-      paddingTop: t.spacing.sm
-    },
-    postRow: {
+    postCount: { color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body },
+    breadcrumb: {
       flexDirection: 'row',
       alignItems: 'center',
-      borderBottomWidth: t.border.width,
-      borderBottomColor: t.colors.buttonShadow,
-      paddingVertical: t.spacing.sm
+      padding: t.spacing.sm,
+      backgroundColor: t.colors.background
     },
-    postText: {
-      flex: 1,
+    breadcrumbText: {
       marginLeft: t.spacing.sm,
       color: t.colors.text,
       fontFamily: t.font.family,
       fontSize: t.font.sizes.body
     },
-    actionButtons: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginLeft: t.spacing.sm
-    }
+    desktopContainer: { flex: 1, backgroundColor: t.colors.background, position: 'relative' }
   });
-
-  // Render each post row
-  const renderItem = ({ item, index }) => (
-    <View style={styles.postRow}>
-      <Win95Button
-        title={playingIndex === index && isPlaying ? '❚❚' : '▶'}
-        onPress={() => handlePlayPause(item.audio_url, index)}
-      />
-      <Text style={styles.postText}>{item.caption}</Text>
-      <View style={styles.actionButtons}>
-        <Win95Button title="Delete" onPress={() => handleDelete(item.id)} />
-      </View>
-    </View>
-  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header with editable username and post count */}
+      {/* Header */}
       <View style={styles.header}>
         <TextInput
           style={styles.usernameInput}
@@ -241,17 +327,41 @@ export default function MyPostsScreen() {
           placeholder="Username"
           placeholderTextColor={t.colors.text}
         />
-        <Text style={styles.postCount}>{posts.length} posts</Text>
+        <Text style={styles.postCount}>{visibleItems.length} items</Text>
       </View>
 
-      {/* Posts list */}
-      <View style={styles.container}>
-        <FlatList
-          data={posts}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          style={{ height: SCREEN_HEIGHT }}
-        />
+      {/* Breadcrumb + New Folder */}
+      <View style={styles.breadcrumb}>
+        {folderStack.length > 1 && <Win95Button title="Up" onPress={goUp} />}
+        <Win95Button title="New Folder" onPress={createFolder} />
+        <Text style={styles.breadcrumbText}>
+          {folderStack.length === 1
+            ? 'Home'
+            : folders.find((f) => f.id === currentFolderId)?.name}
+        </Text>
+      </View>
+
+      {/* Desktop icons */}
+      <View style={styles.desktopContainer}>
+        {visibleItems.map((item) => {
+          const absoluteIndex =
+            item.type === 'file'
+              ? posts.findIndex((p) => p.id === item.id)
+              : folders.findIndex((f) => f.id === item.id);
+          return (
+            <DesktopIcon
+              key={item.id}
+              item={item}
+              onPress={() => {
+                if (item.type === 'folder') setFolderStack((s) => [...s, item.id]);
+                else handlePlayPause(item.audio_url, absoluteIndex);
+              }}
+              onDragEnd={(id, pos) => updatePosition(id, pos, item.type)}
+              onDropOnFolder={(id, folderId) => moveIntoFolder(id, folderId, item.type)}
+              folderRects={folderRects}
+            />
+          );
+        })}
       </View>
     </SafeAreaView>
   );

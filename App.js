@@ -119,7 +119,7 @@ export default function App() {
                 if (route.name === 'Feed') iconName = 'play-outline';
                 if (route.name === 'Explore') iconName = 'search-outline';
                 if (route.name === 'Post') iconName = 'add-circle-outline';
-                if (route.name === 'My Profile') iconName = 'person-outline';
+                if (route.name === 'Profile') iconName = 'person-outline';
                 return <Ionicons name={iconName} size={14} color={color} />;
               },
               tabBarActiveTintColor: theme.colors.text,
@@ -155,7 +155,7 @@ export default function App() {
             />
             <Tab.Screen name="Explore" component={ExploreScreen} />
             <Tab.Screen name="Post" component={RecorderScreen} />
-            <Tab.Screen name="My Profile" component={MyPostsScreen} />
+            <Tab.Screen name="Profile" component={MyPostsScreen} />
           </Tab.Navigator>
         )}
       </NavigationContainer>

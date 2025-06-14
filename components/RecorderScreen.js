@@ -1,11 +1,9 @@
-// components/RecorderScreen.js
-// ⚠️ Install expo-document-picker: run `expo install expo-document-picker`
-
 import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
   View,
   Text,
+  TextInput,
   StyleSheet,
   ActivityIndicator,
   Image
@@ -29,12 +27,11 @@ export default function RecorderScreen() {
   const [sound, setSound] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [postName, setPostName] = useState('');
 
   // Cleanup audio playback
   useEffect(() => {
-    return () => {
-      sound?.unloadAsync();
-    };
+    return () => sound?.unloadAsync();
   }, [sound]);
 
   // Start recording audio
@@ -46,7 +43,9 @@ export default function RecorderScreen() {
         return;
       }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording } = await Audio.Recording.createAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY
+      );
       setRecording(recording);
       setIsRecording(true);
     } catch (err) {
@@ -61,9 +60,7 @@ export default function RecorderScreen() {
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      if (uri) {
-        setLastUri(uri);
-      }
+      if (uri) setLastUri(uri);
       setIsRecording(false);
     } catch (err) {
       console.error('Stop recording error:', err);
@@ -75,16 +72,26 @@ export default function RecorderScreen() {
   async function pickFile() {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*' });
-      if (result.type === 'success' && result.uri) {
-        let fileUri = result.uri;
-        // Ensure file:// URI
-        if (!fileUri.startsWith('file://')) {
-          const dest = FileSystem.documentDirectory + result.name;
-          await FileSystem.copyAsync({ from: fileUri, to: dest });
-          fileUri = dest;
-        }
-        setLastUri(fileUri);
+      let sourceUri, name;
+      if (result.assets && result.assets.length > 0) {
+        sourceUri = result.assets[0].uri;
+        name = result.assets[0].name;
+      } else if (result.type === 'success' && result.uri) {
+        sourceUri = result.uri;
+        name = result.name;
+      } else {
+        return;
       }
+      const destUri = FileSystem.documentDirectory + name;
+      let newUri;
+      if (sourceUri.startsWith('file://')) {
+        await FileSystem.copyAsync({ from: sourceUri, to: destUri });
+        newUri = destUri;
+      } else {
+        const { uri } = await FileSystem.downloadAsync(sourceUri, destUri);
+        newUri = uri;
+      }
+      setLastUri(newUri);
     } catch (err) {
       console.error('File pick error:', err);
       alert('Failed to pick file.');
@@ -113,22 +120,41 @@ export default function RecorderScreen() {
       alert('Please record or upload a file first.');
       return;
     }
+    if (!postName.trim()) {
+      alert('Please enter a post name.');
+      return;
+    }
     setUploading(true);
     try {
-      const response = await fetch(lastUri);
-      const blob = await response.blob();
+      // read file and upload to storage
+      const base64 = await FileSystem.readAsStringAsync(lastUri, { encoding: FileSystem.EncodingType.Base64 });
+      const arrayBuffer = Buffer.from(base64, 'base64');
       const filename = `${uuidv4()}.m4a`;
       const { error: uploadError } = await supabase.storage
         .from('audio-posts')
-        .upload(filename, blob, { contentType: 'audio/m4a', upsert: true });
+        .upload(filename, arrayBuffer, { contentType: 'audio/m4a' });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from('audio-posts').getPublicUrl(filename);
       const publicURL = data.publicUrl;
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      // get user
+      const {
+        data: { user },
+        error: userError
+      } = await supabase.auth.getUser();
       if (userError || !user) throw new Error('User not authenticated');
-      await supabase.from('posts').insert([{ audio_url: publicURL, user_id: user.id }]);
+
+      // insert post row
+      const { data: postData, error: postError } = await supabase
+        .from('posts')
+        .insert([{ audio_url: publicURL, user_id: user.id, name: postName }])
+        .select();
+      if (postError) throw postError;
+      console.log('📝 post inserted:', postData);
+
       alert('Post created successfully!');
       setLastUri(null);
+      setPostName('');
     } catch (err) {
       console.error('Upload failed:', err);
       alert('Could not post audio.');
@@ -139,10 +165,39 @@ export default function RecorderScreen() {
 
   const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: t.colors.background },
-    container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: t.spacing.md },
+    container: {
+      flex: 1,
+      justifyContent: 'flex-start',
+      alignItems: 'center',
+      marginTop: '25%',
+      padding: t.spacing.md
+    },
     icon: { width: 160, height: 160, marginBottom: t.spacing.xl },
-    title: { color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.header, marginBottom: t.spacing.xl },
-    button: { marginVertical: t.spacing.xl, width: '70%' }
+    title: {
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.header * 1.5,
+      marginBottom: t.spacing.lg
+    },
+    input: {
+      width: '70%',
+      height: 48,
+      backgroundColor: 'white',
+      borderWidth: 1,
+      borderColor: t.colors.primary,
+      paddingHorizontal: t.spacing.sm,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.base,
+      color: t.colors.primary,
+      marginBottom: t.spacing.xl
+    },
+    button: { marginVertical: t.spacing.xl, width: '70%' },
+    uriText: {
+      marginTop: t.spacing.md,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.base,
+      color: t.colors.text
+    }
   });
 
   return (
@@ -150,6 +205,13 @@ export default function RecorderScreen() {
       <View style={styles.container}>
         <Image source={micIcon} style={styles.icon} />
         <Text style={styles.title}>Make a Post!</Text>
+        <TextInput
+          placeholder="Post name"
+          value={postName}
+          onChangeText={setPostName}
+          style={styles.input}
+          placeholderTextColor={t.colors.primary}
+        />
         <Win95Button
           title={isRecording ? 'Stop Recording' : 'Start Recording'}
           onPress={isRecording ? stopRecording : startRecording}
@@ -173,7 +235,9 @@ export default function RecorderScreen() {
           disabled={!lastUri || uploading}
           style={styles.button}
         />
-        {uploading && <ActivityIndicator size="large" color={t.colors.text} style={{ marginTop: t.spacing.md }} />}
+        {uploading && <ActivityIndicator size="large" color={t.colors.text} style={{ marginTop: t.spacing.md }} />}        
+        {/* URI display for fun */}
+        {lastUri && <Text style={styles.uriText}>URI: {lastUri}</Text>}
       </View>
     </SafeAreaView>
   );

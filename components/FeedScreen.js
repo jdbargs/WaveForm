@@ -18,12 +18,49 @@ const SCREEN_HEIGHT = WINDOW_HEIGHT - 80;
 
 export default function FeedScreen() {
   const t = useTheme();
+  const isFocused = useIsFocused();
   const [posts, setPosts] = useState([]);
   const postsRef = useRef(posts);
   const [playingIndex, setPlayingIndex] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const soundRef = useRef(null);
-  const isFocused = useIsFocused();
+
+  // dynamic styles using theme
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: t.colors.background },
+    page: {
+      height: SCREEN_HEIGHT,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: t.spacing.md
+    },
+    audioLabel: {
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body,
+      marginBottom: t.spacing.sm
+    },
+    waveformContainer: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      height: 40,
+      marginBottom: t.spacing.md
+    },
+    postName: {
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body,
+      marginBottom: t.spacing.sm,
+      textAlign: 'center'
+    },
+    controls: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      padding: t.spacing.md,
+      borderTopWidth: 1,
+      borderColor: t.colors.buttonShadow
+    }
+  });
 
   // viewability for autoplay
   const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 80 });
@@ -70,7 +107,7 @@ export default function FeedScreen() {
 
     const { data: feedPosts = [] } = await supabase
       .from('posts')
-      .select('id, audio_url, waveform, user_id, users(username)')
+      .select('id, name, audio_url, waveform, user_id, users(username)')
       .in('user_id', ids)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
@@ -83,8 +120,10 @@ export default function FeedScreen() {
       try {
         await soundRef.current.stopAsync();
         await soundRef.current.unloadAsync();
-      } catch {}
+      } catch {};
       soundRef.current = null;
+      setPlayingIndex(null);
+      setIsPlaying(false);
     }
   }
 
@@ -106,8 +145,7 @@ export default function FeedScreen() {
           setPlayingIndex(index);
           setIsPlaying(true);
         } else if (!status.isPlaying && !status.isBuffering) {
-          setPlayingIndex(null);
-          setIsPlaying(false);
+          unloadSound();
         }
       });
     } catch (e) {
@@ -128,14 +166,14 @@ export default function FeedScreen() {
   // render each post
   const renderItem = ({ item, index }) => {
     const username = item.users?.username || 'Unknown';
-    // use existing waveform or generate a random one if missing
     const rawWaveform = Array.isArray(item.waveform) && item.waveform.length
       ? item.waveform
       : Array.from({ length: 50 }, () => Math.random());
 
     return (
       <View style={styles.page}>
-        <Text style={styles.audioLabel}>▶ {username}'s Post</Text>
+        <Text style={styles.audioLabel}>▶ {username}'s Post:</Text>
+        <Text style={styles.postName}>{item.name}</Text>
 
         {/* Waveform bar graph */}
         <View style={styles.waveformContainer}>
@@ -146,55 +184,21 @@ export default function FeedScreen() {
                 width: 2,
                 height: (amp || 0) * 40,
                 backgroundColor: t.colors.buttonShadow,
-                marginHorizontal: 1,
+                marginHorizontal: 1
               }}
             />
           ))}
         </View>
 
-        <Win95Button
-          title={playingIndex === index && isPlaying ? '❚❚' : '▶'}
-          onPress={() => togglePlayPause(index)}
-        />
+        <View style={styles.controls}>
+          <Win95Button
+            title={playingIndex === index && isPlaying ? '❚❚' : '▶'}
+            onPress={() => togglePlayPause(index)}
+          />
+        </View>
       </View>
     );
   };
-
-  const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: t.colors.background },
-    page: {
-      height: SCREEN_HEIGHT,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: t.spacing.md
-    },
-    audioLabel: {
-      color: t.colors.text,
-      fontFamily: t.font.family,
-      fontSize: t.font.sizes.body,
-      marginBottom: t.spacing.sm
-    },
-    waveformContainer: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      height: 40,
-      marginBottom: t.spacing.md
-    },
-    url: {
-      color: t.colors.accentBlue,
-      fontFamily: t.font.family,
-      fontSize: t.font.sizes.caption,
-      marginBottom: t.spacing.md,
-      textAlign: 'center'
-    },
-    controls: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      padding: t.spacing.md,
-      borderTopWidth: 1,
-      borderColor: t.colors.buttonShadow
-    }
-  });
 
   return (
     <View style={styles.container}>
