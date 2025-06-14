@@ -6,7 +6,8 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  Alert
+  Alert,
+  Image
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../ThemeContext';
@@ -41,7 +42,14 @@ export default function AuthScreen() {
     container: {
       flex: 1,
       padding: t.spacing.md,
-      justifyContent: 'center'
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    boombox: {
+      width: 120,
+      height: 120,
+      resizeMode: 'contain',
+      marginBottom: t.spacing.lg
     },
     title: {
       fontFamily: t.font.family,
@@ -59,18 +67,21 @@ export default function AuthScreen() {
       marginBottom: t.spacing.sm,
       paddingHorizontal: t.spacing.sm,
       fontFamily: t.font.family,
-      fontSize: t.font.sizes.body
+      fontSize: t.font.sizes.body,
+      width: '100%'
     },
     buttonContainer: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginTop: t.spacing.md
+      marginTop: t.spacing.md,
+      width: '100%'
     }
   });
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        <Image source={require('../assets/images/boombox.png')} style={styles.boombox} />
         <Text style={styles.title}>Welcome to WaveForm</Text>
         <TextInput
           style={styles.input}

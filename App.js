@@ -2,7 +2,7 @@
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { useFonts } from 'expo-font';
 import {
   NavigationContainer,
@@ -22,6 +22,9 @@ import { supabase } from './lib/supabase';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ThemeProvider } from './ThemeContext';
 import Win95Button from './components/Win95Button';
+
+// Import mail icon for header
+import MailIcon from './assets/images/mail.png';
 
 // Feed Stack
 const FeedStack = createNativeStackNavigator();
@@ -47,11 +50,19 @@ function FeedStackScreen() {
         options={({ navigation }) => ({
           title: 'Feed',
           headerLeft: () => (
-            <Win95Button
-              title="Messages"
+            <TouchableOpacity
               onPress={() => navigation.navigate('Messages')}
-              style={{ marginLeft: theme.spacing.sm }}
-            />
+              style={{
+                marginLeft: theme.spacing.sm,
+                padding: theme.spacing.xs,
+                borderWidth: 2,
+                borderColor: '#000',
+                borderRadius: 0,
+                backgroundColor: theme.colors.buttonFace
+              }}
+            >
+              <Image source={MailIcon} style={{ width: 32, height: 32 }} />
+            </TouchableOpacity>
           ),
         })}
       />
@@ -95,88 +106,56 @@ export default function App() {
     height: buttonSize,
   };
 
-  const commonOptions = {
-    tabBarIcon: ({ color, size }) => {
-      // Determine icon based on route name (handled per screen below)
-      return <Ionicons name={commonOptions.iconName} size={size} color={color} />;
-    },
-    tabBarActiveTintColor: theme.colors.text,
-    tabBarInactiveTintColor: theme.colors.buttonShadow,
-    tabBarItemStyle: {
-      backgroundColor: theme.colors.buttonFace,
-      width: buttonSize,
-      height: buttonSize,
-      marginHorizontal: theme.spacing.xs,
-      borderWidth: theme.border.width,
-      borderColor: theme.colors.buttonShadow,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    tabBarLabelStyle: {
-      fontFamily: theme.font.family,
-      fontSize: theme.font.sizes.caption,
-      marginTop: theme.spacing.xs,
-    },
-    headerShown: false,
-  };
-
   return (
     <ThemeProvider>
       <NavigationContainer>
         {!session ? (
           <AuthScreen />
         ) : (
-          <Tab.Navigator>
+          <Tab.Navigator
+            screenOptions={({ route }) => ({
+              tabBarIcon: ({ color }) => {
+                let iconName = 'ellipse';
+                if (route.name === 'Feed') iconName = 'play-outline';
+                if (route.name === 'Explore') iconName = 'search-outline';
+                if (route.name === 'Post') iconName = 'add-circle-outline';
+                if (route.name === 'My Profile') iconName = 'person-outline';
+                return <Ionicons name={iconName} size={14} color={color} />;
+              },
+              tabBarActiveTintColor: theme.colors.text,
+              tabBarInactiveTintColor: theme.colors.buttonShadow,
+              tabBarStyle: defaultTabBarStyle,
+              tabBarItemStyle: {
+                backgroundColor: theme.colors.buttonFace,
+                width: buttonSize,
+                height: buttonSize,
+                marginHorizontal: theme.spacing.xs,
+                borderWidth: theme.border.width,
+                borderColor: theme.colors.buttonShadow,
+                alignItems: 'center',
+                justifyContent: 'center',
+              },
+              tabBarLabelStyle: {
+                fontFamily: theme.font.family,
+                fontSize: theme.font.sizes.caption,
+                marginTop: theme.spacing.xs,
+              },
+              headerShown: false,
+            })}
+          >
             <Tab.Screen
               name="Feed"
               component={FeedStackScreen}
               options={({ route }) => {
                 const nested = getFocusedRouteNameFromRoute(route) ?? 'FeedMain';
                 return {
-                  ...commonOptions,
-                  tabBarIcon: ({ color }) => (
-                    <Ionicons name="play-outline" size={14} color={color} />
-                  ),
-                  tabBarStyle:
-                    nested === 'FeedMain'
-                      ? defaultTabBarStyle
-                      : { display: 'none' },
+                  tabBarStyle: nested === 'FeedMain' ? defaultTabBarStyle : { display: 'none' },
                 };
               }}
             />
-            <Tab.Screen
-              name="Explore"
-              component={ExploreScreen}
-              options={{
-                ...commonOptions,
-                tabBarIcon: ({ color }) => (
-                  <Ionicons name="search-outline" size={14} color={color} />
-                ),
-                tabBarStyle: defaultTabBarStyle,
-              }}
-            />
-            <Tab.Screen
-              name="Post"
-              component={RecorderScreen}
-              options={{
-                ...commonOptions,
-                tabBarIcon: ({ color }) => (
-                  <Ionicons name="add-circle-outline" size={14} color={color} />
-                ),
-                tabBarStyle: defaultTabBarStyle,
-              }}
-            />
-            <Tab.Screen
-              name="My Profile"
-              component={MyPostsScreen}
-              options={{
-                ...commonOptions,
-                tabBarIcon: ({ color }) => (
-                  <Ionicons name="person-outline" size={14} color={color} />
-                ),
-                tabBarStyle: defaultTabBarStyle,
-              }}
-            />
+            <Tab.Screen name="Explore" component={ExploreScreen} />
+            <Tab.Screen name="Post" component={RecorderScreen} />
+            <Tab.Screen name="My Profile" component={MyPostsScreen} />
           </Tab.Navigator>
         )}
       </NavigationContainer>

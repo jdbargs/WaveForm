@@ -25,10 +25,8 @@ export default function FeedScreen() {
   const soundRef = useRef(null);
   const isFocused = useIsFocused();
 
-  // Viewability config for autoplay
+  // viewability for autoplay
   const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 80 });
-
-  // Autoplay when a new item comes into view
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length === 0) return;
     const idx = viewableItems[0].index;
@@ -38,12 +36,11 @@ export default function FeedScreen() {
     }
   });
 
-  // Keep ref in sync
   useEffect(() => {
     postsRef.current = posts;
   }, [posts]);
 
-  // Allow playback in silent mode
+  // silent mode
   useEffect(() => {
     (async () => {
       try {
@@ -54,18 +51,17 @@ export default function FeedScreen() {
     })();
   }, []);
 
-  // Fetch posts on focus
+  // fetch when focused
   useEffect(() => {
     if (isFocused) fetchFeedPosts();
     return unloadSound;
   }, [isFocused]);
 
-  // Fetch feed posts, including username
+  // fetch posts + waveform
   async function fetchFeedPosts() {
-    const { data: authData, error: userError } = await supabase.auth.getUser();
-    if (userError || !authData?.user?.id) return;
-    const uid = authData.user.id;
-
+    const { data: authData } = await supabase.auth.getUser();
+    const uid = authData?.user?.id;
+    if (!uid) return;
     const { data: follows = [] } = await supabase
       .from('follows')
       .select('followed_id')
@@ -74,14 +70,14 @@ export default function FeedScreen() {
 
     const { data: feedPosts = [] } = await supabase
       .from('posts')
-      .select('id, audio_url, user_id, users(username)')
+      .select('id, audio_url, waveform, user_id, users(username)')
       .in('user_id', ids)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
     setPosts(feedPosts);
   }
 
-  // Unload audio
+  // unload audio
   async function unloadSound() {
     if (soundRef.current) {
       try {
@@ -92,7 +88,7 @@ export default function FeedScreen() {
     }
   }
 
-  // Play at specific index
+  // play by index
   async function playSoundAtIndex(index) {
     if (index < 0 || index >= postsRef.current.length) return;
     const uri = postsRef.current[index].audio_url;
@@ -100,7 +96,10 @@ export default function FeedScreen() {
 
     await unloadSound();
     try {
-      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+      const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true }
+      );
       soundRef.current = sound;
       sound.setOnPlaybackStatusUpdate(status => {
         if (status.isPlaying) {
@@ -116,7 +115,7 @@ export default function FeedScreen() {
     }
   }
 
-  // Toggle play/pause
+  // toggle
   function togglePlayPause(index) {
     if (playingIndex === index && isPlaying) {
       soundRef.current?.pauseAsync();
@@ -126,12 +125,33 @@ export default function FeedScreen() {
     }
   }
 
+  // render each post
   const renderItem = ({ item, index }) => {
     const username = item.users?.username || 'Unknown';
+    // use existing waveform or generate a random one if missing
+    const rawWaveform = Array.isArray(item.waveform) && item.waveform.length
+      ? item.waveform
+      : Array.from({ length: 50 }, () => Math.random());
+
     return (
       <View style={styles.page}>
         <Text style={styles.audioLabel}>▶ {username}'s Post</Text>
-        <Text style={styles.url}>{item.audio_url}</Text>
+
+        {/* Waveform bar graph */}
+        <View style={styles.waveformContainer}>
+          {rawWaveform.map((amp, i) => (
+            <View
+              key={i}
+              style={{
+                width: 2,
+                height: (amp || 0) * 40,
+                backgroundColor: t.colors.buttonShadow,
+                marginHorizontal: 1,
+              }}
+            />
+          ))}
+        </View>
+
         <Win95Button
           title={playingIndex === index && isPlaying ? '❚❚' : '▶'}
           onPress={() => togglePlayPause(index)}
@@ -154,12 +174,25 @@ export default function FeedScreen() {
       fontSize: t.font.sizes.body,
       marginBottom: t.spacing.sm
     },
+    waveformContainer: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      height: 40,
+      marginBottom: t.spacing.md
+    },
     url: {
       color: t.colors.accentBlue,
       fontFamily: t.font.family,
       fontSize: t.font.sizes.caption,
       marginBottom: t.spacing.md,
       textAlign: 'center'
+    },
+    controls: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      padding: t.spacing.md,
+      borderTopWidth: 1,
+      borderColor: t.colors.buttonShadow
     }
   });
 

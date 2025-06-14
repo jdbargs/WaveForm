@@ -32,7 +32,7 @@ export default function MessagesScreen({ navigation }) {
     })();
   }, []);
 
-  // hide tab bar on focus, restore on blur
+  // hide tab bar on focus
   useFocusEffect(
     React.useCallback(() => {
       const parent = navigation.getParent();
@@ -115,7 +115,6 @@ export default function MessagesScreen({ navigation }) {
       setNewChatName('');
       setSearchQuery('');
       setSelectedUsers([]);
-      // refresh chats
       const { data, error } = await supabase
         .from('chat_members')
         .select('chat_id, chats(name)')
@@ -163,7 +162,7 @@ export default function MessagesScreen({ navigation }) {
   );
 
   const renderChat = ({ item }) => (
-    <View style={[styles.chatRow, { marginBottom: t.spacing.sm }]}> 
+    <View style={[styles.chatRow, { marginBottom: t.spacing.sm }]}>
       <Win95Button
         title={item.name || 'Untitled'}
         onPress={() => navigation.navigate('Chat', { chatId: item.chat_id })}
@@ -184,8 +183,8 @@ export default function MessagesScreen({ navigation }) {
   );
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: t.colors.background }]}> 
-      <View style={[styles.container, { padding: t.spacing.md }]}> 
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: t.colors.background }]}>
+      <View style={[styles.container, { padding: t.spacing.md }]}>
         <TextInput
           style={[
             styles.input,
@@ -218,31 +217,44 @@ export default function MessagesScreen({ navigation }) {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        {/* Create Chat button moved here */}
         <Win95Button
           title="Create Chat"
           onPress={createChat}
           style={{ marginBottom: t.spacing.md }}
         />
+
         <FlatList
           data={users}
           keyExtractor={u => u.id}
           renderItem={renderUser}
           style={{ maxHeight: 150, marginBottom: t.spacing.md }}
           ListEmptyComponent={
-            searchQuery.trim() ? (
-              <Text style={{ color: t.colors.text }}>No matches.</Text>
-            ) : null
+            searchQuery.trim() && <Text style={{ color: t.colors.text }}>No matches.</Text>
           }
         />
+
         {!!selectedUsers.length && (
-          <Text style={[styles.selectedInfo, { color: t.colors.text }]}>Adding: {selectedUsers.map(u => u.username).join(', ')}</Text>
+          <Text
+            style={{
+              marginBottom: t.spacing.sm,
+              fontFamily: t.font.family,
+              fontSize: t.font.sizes.body,
+              color: t.colors.text
+            }}
+          >
+            Adding: {selectedUsers.map(u => u.username).join(', ')}
+          </Text>
         )}
+
         <FlatList
           data={chats}
           keyExtractor={item => item.chat_id}
           renderItem={renderChat}
-          ListEmptyComponent={<Text style={[styles.empty, { color: t.colors.text }]}>No chats yet.</Text>}
+          ListEmptyComponent={
+            <Text style={[styles.empty, { color: t.colors.text }]}>
+              No chats yet.
+            </Text>
+          }
         />
       </View>
     </SafeAreaView>
@@ -254,6 +266,5 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   input: { height: 40, borderWidth: 1, paddingHorizontal: 8, marginBottom: 8 },
   chatRow: { flexDirection: 'row', alignItems: 'center' },
-  selectedInfo: { marginBottom: 8 },
   empty: { textAlign: 'center', marginTop: 16 }
 });
