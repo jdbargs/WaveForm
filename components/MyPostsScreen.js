@@ -23,14 +23,25 @@ import Win95Button from './Win95Button';
 import DesktopIcon from './DesktopIcon';
 
 const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
-const SCREEN_HEIGHT = WINDOW_HEIGHT - 80; // above tab bar
-const ICON_SIZE = 64;
+const ICON_SIZE = 80;
 const TRASH_MARGIN = 20;
 const TAB_BAR_HEIGHT = 80; // height of bottom tab bar
+const HEADER_HEIGHT     = 56;  // whatever your <View style={styles.header}> actually renders at
+const BREADCRUMB_HEIGHT = 48;  // whatever your <View style={styles.breadcrumb}> actually renders at
+const DROP_PADDING = 20;    // how many pixels extra you want around each icon
+const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
+
 
 export default function MyPostsScreen() {
   const navigation = useNavigation();
   const t = useTheme();
+  // at the top of MyPostsScreen.js
+  const [desktopHeight, setDesktopHeight] = useState(0);
+  // inside MyPostsScreen, after const [desktopHeight,...]
+  const containerWidth  = WINDOW_WIDTH;
+  const containerHeight = desktopHeight ||
+    (WINDOW_HEIGHT - HEADER_HEIGHT - BREADCRUMB_HEIGHT - TAB_BAR_HEIGHT);
+
 
   // Tab title
   useLayoutEffect(() => {
@@ -121,27 +132,54 @@ export default function MyPostsScreen() {
     folderStack.length > 1 && setFolderStack((s) => s.slice(0, -1));
 
   // New folder
-  const createFolder = async () => {
+  const createFolder = () => {
     if (!userId) return;
-    const defaultPos = {
-      x: Math.random() * (WINDOW_WIDTH - ICON_SIZE),
-      y: Math.random() * (SCREEN_HEIGHT - ICON_SIZE)
-    };
-    const { data: newFolder, error } = await supabase
-      .from('folders')
-      .insert({
-        name: 'New Folder',
-        user_id: userId,
-        parent_folder_id: currentFolderId,
-        position: defaultPos
-      })
-      .select('*')
-      .single();
-    if (!error)
-      setFolders((f) => [
-        ...f,
-        { ...newFolder, parentFolderId: newFolder.parent_folder_id, position: newFolder.position, type: 'folder' }
-      ]);
+
+    Alert.prompt(
+      'New Folder',
+      'Enter folder name:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'OK',
+          onPress: async (name) => {
+            // fallback if user left the field blank
+            const folderName = name?.trim() || 'New Folder';
+            // Pick a random position inside the desktop
+            const defaultPos = {
+              x: Math.random() * (containerWidth  - ICON_SIZE),
+              y: Math.random() * (containerHeight - ICON_SIZE),
+            };
+            // Insert into Supabase
+            const { data: newFolder, error } = await supabase
+              .from('folders')
+              .insert({
+                name: folderName,
+                user_id: userId,
+                parent_folder_id: currentFolderId,
+                position: defaultPos,
+              })
+              .select('*')
+              .single();
+            if (!error) {
+              setFolders((f) => [
+                ...f,
+                {
+                  ...newFolder,
+                  parentFolderId: newFolder.parent_folder_id,
+                  position: newFolder.position,
+                  type: 'folder',
+                },
+              ]);
+            } else {
+              console.error('Error creating folder:', error);
+            }
+          },
+        },
+      ],
+      'plain-text',
+      'New Folder' // default text
+    );
   };
 
   // Audio playback
@@ -173,9 +211,51 @@ export default function MyPostsScreen() {
   };
   useEffect(() => () => soundRef.current && soundRef.current.unloadAsync(), []);
 
+  useEffect(() => {
+    if (desktopHeight === 0) return;  
+    const usableHeight = desktopHeight - TAB_BAR_HEIGHT;
+    const usableWidth  = WINDOW_WIDTH;
+
+    // helper to clamp a single position
+    const clampPos = ({ x, y }) => ({
+      x: clamp(x, 0, containerW - ICON_SIZE),
+      y: clamp(y, 0, containerH - ICON_SIZE),
+    });
+
+    // clamp posts
+    setPosts(old =>
+      old.map(p => ({
+        ...p,
+        position: clampPos(p.position)
+      }))
+    );
+    // clamp folders
+    setFolders(old =>
+      old.map(f => ({
+        ...f,
+        position: clampPos(f.position)
+      }))
+    );
+  }, [desktopHeight]);
+
   // Delete
   const handleDeletePost = async (id) => { await supabase.from('posts').delete().eq('id', id); setPosts((p) => p.filter((x) => x.id !== id)); };
-  const handleDeleteFolder = async (id) => { await supabase.from('folders').delete().eq('id', id); setFolders((f) => f.filter((x) => x.id !== id)); };
+  const handleDeleteFolder = async (id) => {
+    const { data, error } = await supabase
+      .from('folders')
+      .delete()
+      .eq('id', id)
+      .select();                 
+
+    if (error) {
+      console.error('Folder delete error:', error);
+      Alert.alert('Delete failed', error.message);
+    } else {
+      console.log('Deleted folder:', data);
+      setFolders((f) => f.filter((x) => x.id !== id));
+    }
+  };
+
   const handleTrashDrop = (id, type) => type === 'file' ? handleDeletePost(id) : handleDeleteFolder(id);
 
   // Rename
@@ -214,12 +294,62 @@ export default function MyPostsScreen() {
   };
 
   // Move & reposition
-  const updatePosition = async (id, pos, type) => {
+  const updatePosition = async (id, rawPos, type) => {
+    // 1) Clamp into desktop bounds
+    const usableHeight = desktopHeight - TAB_BAR_HEIGHT;
+    const usableWidth  = WINDOW_WIDTH;
+
+    let x = clamp(rawPos.x, 0, usableWidth - ICON_SIZE);
+    let y = clamp(rawPos.y, 0, usableHeight - ICON_SIZE);
+    let pos = { x, y };
+
+    // 2) Build “forbidden” zones around each drop-icon
+    const forbiddenZones = [
+      {
+        x: trashRect.x - DROP_PADDING,
+        y: trashRect.y - DROP_PADDING,
+        width:  trashRect.width  + DROP_PADDING * 2,
+        height: trashRect.height + DROP_PADDING * 2,
+      },
+      {
+        x: portalRect.x - DROP_PADDING,
+        y: portalRect.y - DROP_PADDING,
+        width:  portalRect.width  + DROP_PADDING * 2,
+        height: portalRect.height + DROP_PADDING * 2,
+      }
+    ];
+
+    // 3) AABB intersection test
+    const intersects = (a, b) =>
+      a.x < b.x + b.width &&
+      a.x + a.width  > b.x &&
+      a.y < b.y + b.height &&
+      a.y + a.height > b.y;
+
+    const box = { x: pos.x, y: pos.y, width: ICON_SIZE, height: ICON_SIZE };
+
+    // 4) If it collides, push it above that zone
+    forbiddenZones.forEach(zone => {
+      if (intersects(box, zone)) {
+        // move it immediately above the forbidden area
+        pos.y = zone.y - ICON_SIZE - 1;
+        // re‐clamp so it never goes negative
+        pos.y = clamp(pos.y, 0, usableHeight - ICON_SIZE);
+        // update our test box
+        box.y = pos.y;
+      }
+    });
+
+    // 5) Commit the new “safe” position
     if (type === 'file') {
-      setPosts((p) => p.map((x) => x.id === id ? { ...x, position: pos } : x));
+      setPosts(p =>
+        p.map(x => x.id === id ? { ...x, position: pos } : x)
+      );
       await supabase.from('posts').update({ position: pos }).eq('id', id);
     } else {
-      setFolders((f) => f.map((x) => x.id === id ? { ...x, position: pos } : x));
+      setFolders(f =>
+        f.map(x => x.id === id ? { ...x, position: pos } : x)
+      );
       await supabase.from('folders').update({ position: pos }).eq('id', id);
     }
   };
@@ -255,8 +385,18 @@ export default function MyPostsScreen() {
 
   // Drop zones
   const folderRects = visibleFolders.map((f) => ({ id: f.id, x: f.position.x, y: f.position.y, width: ICON_SIZE, height: ICON_SIZE }));
-  const trashRect = { x: WINDOW_WIDTH - ICON_SIZE - TRASH_MARGIN, y: SCREEN_HEIGHT - ICON_SIZE - (TRASH_MARGIN + TAB_BAR_HEIGHT), width: ICON_SIZE, height: ICON_SIZE };
-  const portalRect = { x: TRASH_MARGIN, y: SCREEN_HEIGHT - ICON_SIZE - (TRASH_MARGIN + TAB_BAR_HEIGHT), width: ICON_SIZE, height: ICON_SIZE };
+  const trashRect = {
+    x: WINDOW_WIDTH - ICON_SIZE - TRASH_MARGIN,
+    y: (desktopHeight - ICON_SIZE - TRASH_MARGIN) / 1.15,
+    width: ICON_SIZE + DROP_PADDING,
+    height: ICON_SIZE + DROP_PADDING,
+  };
+  const portalRect = {
+    x: TRASH_MARGIN - DROP_PADDING,
+    y: (desktopHeight - ICON_SIZE - TRASH_MARGIN) / 1.15,
+    width: ICON_SIZE + DROP_PADDING,
+    height: ICON_SIZE + DROP_PADDING,
+  };
 
   const styles = StyleSheet.create({ safeArea: { flex: 1, backgroundColor: t.colors.background }, header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: t.colors.buttonFace, borderBottomWidth: t.border.width, borderBottomColor: t.colors.buttonShadow, padding: t.spacing.sm }, usernameInput: { flex: 1, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.header, fontWeight: t.font.weight.bold, borderBottomWidth: t.border.width, borderBottomColor: t.colors.buttonShadow, marginRight: t.spacing.sm }, postCount: { color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body }, breadcrumb: { flexDirection: 'row', alignItems: 'center', padding: t.spacing.sm, backgroundColor: t.colors.background }, breadcrumbText: { marginLeft: t.spacing.sm, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body }, desktopContainer: { flex: 1, backgroundColor: t.colors.background, position: 'relative' } });
 
@@ -264,28 +404,51 @@ export default function MyPostsScreen() {
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
-        <TextInput style={styles.usernameInput} value={username} onChangeText={setUsername} onBlur={handleUsernameSave} placeholder="Username" placeholderTextColor={t.colors.text} />
+        <TextInput
+          style={styles.usernameInput}
+          value={username}
+          onChangeText={setUsername}
+          onBlur={handleUsernameSave}
+          placeholder="Username"
+          placeholderTextColor={t.colors.text}
+        />
         <Text style={styles.postCount}>{visibleItems.length} items</Text>
       </View>
+
       {/* Breadcrumb + New Folder */}
       <View style={styles.breadcrumb}>
-        {folderStack.length > 1 && <Win95Button title="Up" onPress={goUp} />}
+        {folderStack.length > 1 && <Win95Button title="<" onPress={goUp} />}
         <Win95Button title="New Folder" onPress={createFolder} />
-        <Text style={styles.breadcrumbText}>{folderStack.length===1? 'Home':folders.find((f)=>f.id===currentFolderId)?.name}</Text>
+        <Text style={styles.breadcrumbText}>
+          {folderStack.length === 1
+            ? 'Home'
+            : folders.find((f) => f.id === currentFolderId)?.name}
+        </Text>
       </View>
-      {/* Desktop icons */}
-      <View style={styles.desktopContainer}>
+
+      {/* Desktop icons + debug overlays */}
+      <View
+        style={styles.desktopContainer}
+        onLayout={(e) => setDesktopHeight(e.nativeEvent.layout.height)}
+      >
         {visibleItems.map((item) => {
-          const absoluteIndex = item.type === 'file'
-            ? posts.findIndex((p) => p.id === item.id)
-            : folders.findIndex((f) => f.id === item.id);
+          const absoluteIndex =
+            item.type === 'file'
+              ? posts.findIndex((p) => p.id === item.id)
+              : folders.findIndex((f) => f.id === item.id);
           return (
             <DesktopIcon
               key={item.id}
               item={item}
-              onPress={() => item.type==='folder'?setFolderStack((s)=>[...s,item.id]):handlePlayPause(item.audio_url,absoluteIndex)}
-              onDragEnd={(id,pos)=>updatePosition(id,pos,item.type)}
-              onDropOnFolder={(id,folderId)=>moveIntoFolder(id,folderId,item.type)}
+              onPress={() =>
+                item.type === 'folder'
+                  ? setFolderStack((s) => [...s, item.id])
+                  : handlePlayPause(item.audio_url, absoluteIndex)
+              }
+              onDragEnd={(id, pos) => updatePosition(id, pos, item.type)}
+              onDropOnFolder={(id, folderId) =>
+                moveIntoFolder(id, folderId, item.type)
+              }
               onTrashDrop={handleTrashDrop}
               onRenameDrop={handleRenameDrop}
               folderRects={folderRects}
@@ -295,9 +458,29 @@ export default function MyPostsScreen() {
           );
         })}
         {/* Trash Icon */}
-        <Image source={require('../assets/images/trash.png')} style={{position:'absolute',width:ICON_SIZE,height:ICON_SIZE,bottom:TRASH_MARGIN+TAB_BAR_HEIGHT,right:TRASH_MARGIN}} resizeMode="contain" />
+        <Image
+          source={require('../assets/images/trash.png')}
+          style={{
+            position: 'absolute',
+            width: ICON_SIZE,
+            height: ICON_SIZE,
+            bottom: TRASH_MARGIN + TAB_BAR_HEIGHT - 20,
+            right: TRASH_MARGIN - 10,
+          }}
+          resizeMode="contain"
+        />
         {/* Portal Icon */}
-        <Image source={require('../assets/images/portal.png')} style={{position:'absolute',width:ICON_SIZE,height:ICON_SIZE,bottom:TRASH_MARGIN+TAB_BAR_HEIGHT,left:TRASH_MARGIN}} resizeMode="contain" />
+        <Image
+          source={require('../assets/images/portal.png')}
+          style={{
+            position: 'absolute',
+            width: ICON_SIZE,
+            height: ICON_SIZE,
+            bottom: TRASH_MARGIN + TAB_BAR_HEIGHT - 20,
+            left: TRASH_MARGIN - 10,
+          }}
+          resizeMode="contain"
+        />
       </View>
     </SafeAreaView>
   );

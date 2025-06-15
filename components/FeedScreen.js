@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabase';
 import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../ThemeContext';
 import Win95Button from './Win95Button';
+import * as FileSystem from 'expo-file-system';
 
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
 const SCREEN_HEIGHT = WINDOW_HEIGHT - 80;
@@ -134,9 +135,24 @@ export default function FeedScreen() {
     if (!uri) return;
 
     await unloadSound();
+
+    let uriToPlay = uri;
+    if (uri.startsWith('http')) {
+      const filename = uri.split('/').pop();
+      const localUri = FileSystem.documentDirectory + filename;
+      const info = await FileSystem.getInfoAsync(localUri);
+      if (!info.exists) {
+        await FileSystem.downloadAsync(uri, localUri);
+      }
+      uriToPlay = localUri;
+    }
     try {
+      if (!uriToPlay) {
+        console.error('No URI to play.');
+        return;
+      }
       const { sound } = await Audio.Sound.createAsync(
-        { uri },
+        { uriToPlay },
         { shouldPlay: true }
       );
       soundRef.current = sound;

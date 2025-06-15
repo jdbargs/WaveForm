@@ -21,7 +21,11 @@ export default function DesktopIcon({
   trashRect
 }) {
   // Animated value for position
-  const pan = useRef(new Animated.ValueXY(item.position)).current;
+  // ensure we always have numeric x & y
+  const { x = 0, y = 0 } = item.position || {};
+  const initialPos = { x: Number(x), y: Number(y) };
+  const pan = useRef(new Animated.ValueXY(initialPos)).current;
+
 
   // Sync to prop changes
   useEffect(() => {

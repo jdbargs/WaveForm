@@ -17,6 +17,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '../ThemeContext';
 import Win95Button from './Win95Button';
 
+
 // mic icon asset
 const micIcon = require('../assets/images/mic.png');
 
@@ -28,6 +29,7 @@ export default function RecorderScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [postName, setPostName] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // Cleanup audio playback
   useEffect(() => {
@@ -99,69 +101,118 @@ export default function RecorderScreen() {
   }
 
   // Play the last recorded or selected file
-  async function handlePlay() {
+  // Toggle playback: play, pause, or resume
+  async function handleTogglePlayback() {
     if (!lastUri) {
       alert('Nothing to play.');
       return;
     }
+
+    let uriToPlay = lastUri;
+
+    // If it's a remote URL, download to local first
+    if (lastUri.startsWith('http')) {
+      const filename = lastUri.split('/').pop();
+      const localUri = FileSystem.documentDirectory + filename;
+
+      try {
+        // only download if not already cached
+        const fileInfo = await FileSystem.getInfoAsync(localUri);
+        if (!fileInfo.exists) {
+          await FileSystem.downloadAsync(lastUri, localUri);
+        }
+        uriToPlay = localUri;
+      } catch (err) {
+        console.error('Download for playback failed:', err);
+        alert('Could not download file for playback.');
+        return;
+      }
+    }
+
+    // Now toggle play/pause on the local file
     try {
-      const { sound } = await Audio.Sound.createAsync({ uri: lastUri });
-      setSound(sound);
-      await sound.playAsync();
+      if (sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isPlaying) {
+          await sound.pauseAsync();
+          setIsPlaying(false);
+          return;
+        } else {
+          await sound.playAsync();
+          setIsPlaying(true);
+          return;
+        }
+      }
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: uriToPlay },
+        { shouldPlay: true }
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+
+      newSound.setOnPlaybackStatusUpdate(status => {
+        if (status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
     } catch (err) {
       console.error('Playback error:', err);
       alert('Playback failed.');
     }
   }
 
+
   // Upload audio to Supabase
-  async function handleUpload() {
-    if (!lastUri) {
-      alert('Please record or upload a file first.');
-      return;
-    }
-    if (!postName.trim()) {
-      alert('Please enter a post name.');
-      return;
-    }
-    setUploading(true);
-    try {
-      // read file and upload to storage
-      const base64 = await FileSystem.readAsStringAsync(lastUri, { encoding: FileSystem.EncodingType.Base64 });
-      const arrayBuffer = Buffer.from(base64, 'base64');
-      const filename = `${uuidv4()}.m4a`;
-      const { error: uploadError } = await supabase.storage
-        .from('audio-posts')
-        .upload(filename, arrayBuffer, { contentType: 'audio/m4a' });
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from('audio-posts').getPublicUrl(filename);
-      const publicURL = data.publicUrl;
-
-      // get user
-      const {
-        data: { user },
-        error: userError
-      } = await supabase.auth.getUser();
-      if (userError || !user) throw new Error('User not authenticated');
-
-      // insert post row
-      const { data: postData, error: postError } = await supabase
-        .from('posts')
-        .insert([{ audio_url: publicURL, user_id: user.id, name: postName }])
-        .select();
-      if (postError) throw postError;
-      console.log('📝 post inserted:', postData);
-
-      alert('Post created successfully!');
-      setLastUri(null);
-      setPostName('');
-    } catch (err) {
-      console.error('Upload failed:', err);
-      alert('Could not post audio.');
-    } finally {
-      setUploading(false);
-    }
+async function handleUpload() {
+  if (!lastUri) {
+    alert('Please record or upload a file first.');
+    return;
   }
+  if (!postName.trim()) {
+    alert('Please enter a post name.');
+    return;
+  }
+  setUploading(true);
+  try {
+    // fetch the local file as a blob to preserve binary integrity
+    const response = await fetch(lastUri);
+    const blob = await response.blob();
+
+    const filename = `${uuidv4()}.m4a`;
+    const { error: uploadError } = await supabase.storage
+      .from('audio-posts')
+      .upload(filename, blob, { contentType: 'audio/m4a' });
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('audio-posts').getPublicUrl(filename);
+    const publicURL = data.publicUrl;
+
+    // get user
+    const {
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser();
+    if (userError || !user) throw new Error('User not authenticated');
+
+    // insert post row
+    const { data: postData, error: postError } = await supabase
+      .from('posts')
+      .insert([{ audio_url: publicURL, user_id: user.id, name: postName }])
+      .select();
+    if (postError) throw postError;
+
+    alert('Post created successfully!');
+    setLastUri(null);
+    setPostName('');
+  } catch (err) {
+    console.error('Upload failed:', err);
+    alert('Could not post audio.');
+  } finally {
+    setUploading(false);
+  }
+}
+
 
   const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: t.colors.background },
@@ -223,11 +274,11 @@ export default function RecorderScreen() {
           disabled={isRecording || uploading}
           style={styles.button}
         />
-        <Win95Button
-          title="Play"
-          onPress={handlePlay}
-          disabled={!lastUri}
-          style={styles.button}
+          <Win95Button
+            title={isPlaying ? 'Pause' : 'Play'}
+            onPress={handleTogglePlayback}
+            disabled={!lastUri}
+            style={styles.button}
         />
         <Win95Button
           title="Post"
