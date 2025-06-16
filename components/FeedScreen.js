@@ -110,6 +110,7 @@ export default function FeedScreen() {
       .from('posts')
       .select('id, name, audio_url, waveform, user_id, users(username)')
       .in('user_id', ids)
+      .eq('is_public', true)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
     setPosts(feedPosts);

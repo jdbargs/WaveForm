@@ -3,7 +3,7 @@ import React from 'react';
 import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../ThemeContext';
 
-export default function Win95Button({ title, onPress }) {
+export default function Win95Button({ title, onPress, children, style }) {
   const t = useTheme();
   return (
     <TouchableOpacity
@@ -16,19 +16,24 @@ export default function Win95Button({ title, onPress }) {
           paddingHorizontal: t.dimensions.buttonPaddingHorizontal,
           paddingVertical: t.dimensions.buttonPaddingVertical,
           height: t.dimensions.buttonHeight,
-        }
+        },
+        style,
       ]}
     >
-      <Text
-        style={{
-          color: t.colors.text,
-          fontFamily: t.font.family,
-          fontSize: t.font.sizes.body,
-          fontWeight: t.font.weight.bold
-        }}
-      >
-        {title}
-      </Text>
+      {children ? (
+        children
+      ) : (
+        <Text
+          style={{
+            color: t.colors.text,
+            fontFamily: t.font.family,
+            fontSize: t.font.sizes.body,
+            fontWeight: t.font.weight.bold,
+          }}
+        >
+          {title}
+        </Text>
+      )}
     </TouchableOpacity>
   );
 }

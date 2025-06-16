@@ -30,6 +30,7 @@ export default function RecorderScreen() {
   const [uploading, setUploading] = useState(false);
   const [postName, setPostName] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPublic, setIsPublic] = useState(true);  // true = “To share”
 
   // Cleanup audio playback
   useEffect(() => {
@@ -226,7 +227,7 @@ export default function RecorderScreen() {
 
       const { error: postError } = await supabase
         .from("posts")
-        .insert([{ audio_url: publicUrl, user_id: user.id, name: postName }]);
+        .insert([{ audio_url: publicUrl, user_id: user.id, name: postName, is_public: isPublic }]);
       if (postError) throw postError;
 
       alert("Post created successfully!");
@@ -276,12 +277,48 @@ export default function RecorderScreen() {
       fontFamily: t.font.family,
       fontSize: t.font.sizes.base,
       color: t.colors.text
+    },
+    toggleRow: {
+      position: 'absolute',
+      top: -50,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      zIndex: 10,
+    },
+    toggleBtn: {
+      borderWidth: 1,
+      borderColor: '#000',
+      // you can add padding/margins to taste
+    },
+    selectedToggle: {
+      borderWidth: 3,
     }
   });
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        {/* share toggle */}
+        <View style={styles.toggleRow}>
+          <Win95Button
+            title="To share"
+            onPress={() => setIsPublic(true)}
+            style={[
+              styles.toggleBtn,
+              isPublic && styles.selectedToggle
+            ]}
+          />
+          <Win95Button
+            title="Not to share"
+            onPress={() => setIsPublic(false)}
+            style={[
+              styles.toggleBtn,
+              !isPublic && styles.selectedToggle
+            ]}
+          />
+        </View>
         <Image source={micIcon} style={styles.icon} />
         <Text style={styles.title}>Make a Post!</Text>
         <TextInput
@@ -292,7 +329,7 @@ export default function RecorderScreen() {
           placeholderTextColor={t.colors.primary}
         />
         <Win95Button
-          title={isRecording ? 'Stop Recording' : 'Start Recording'}
+          title={isRecording ? 'Stop' : 'Record'}
           onPress={isRecording ? stopRecording : startRecording}
           style={styles.button}
         />
@@ -302,11 +339,11 @@ export default function RecorderScreen() {
           disabled={isRecording || uploading}
           style={styles.button}
         />
-          <Win95Button
-            title={isPlaying ? 'Pause' : 'Play'}
-            onPress={handleTogglePlayback}
-            disabled={!lastUri}
-            style={styles.button}
+        <Win95Button
+          title={isPlaying ? 'Pause' : 'Play'}
+          onPress={handleTogglePlayback}
+          disabled={!lastUri}
+          style={styles.button}
         />
         <Win95Button
           title="Post"

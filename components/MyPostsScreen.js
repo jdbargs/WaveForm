@@ -13,6 +13,7 @@ import {
   Dimensions,
   StyleSheet,
   Alert,
+  TouchableOpacity,
   Image
 } from 'react-native';
 import { Audio } from 'expo-av';
@@ -418,13 +419,22 @@ export default function MyPostsScreen() {
       {/* Breadcrumb + New Folder */}
       <View style={styles.breadcrumb}>
         {folderStack.length > 1 && <Win95Button title="<" onPress={goUp} />}
-        <Win95Button title="New Folder" onPress={createFolder} />
+        <Win95Button onPress={createFolder}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ marginRight: 6, fontSize: 22, marginTop: -7 }}>+</Text>
+            <Image
+              source={require('../assets/images/newfolder.png')}
+              style={{ width: 25, height: 25, resizeMode: 'contain' }}
+            />
+          </View>
+        </Win95Button>
         <Text style={styles.breadcrumbText}>
           {folderStack.length === 1
             ? 'Home'
             : folders.find((f) => f.id === currentFolderId)?.name}
-        </Text>
+       </Text>
       </View>
+
 
       {/* Desktop icons + debug overlays */}
       <View
