@@ -46,7 +46,7 @@ export default function MyPostsScreen() {
 
   // Tab title
   useLayoutEffect(() => {
-    navigation.setOptions({ title: 'My Profile' });
+    navigation.setOptions({ title: 'You' });
   }, [navigation]);
 
   // Auth/profile

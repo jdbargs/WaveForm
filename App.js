@@ -153,9 +153,9 @@ export default function App() {
                 };
               }}
             />
-            <Tab.Screen name="Explore" component={ExploreScreen} />
+            <Tab.Screen name="World" component={ExploreScreen} />
             <Tab.Screen name="Post" component={RecorderScreen} />
-            <Tab.Screen name="Profile" component={MyPostsScreen} />
+            <Tab.Screen name="You" component={MyPostsScreen} />
           </Tab.Navigator>
         )}
       </NavigationContainer>
