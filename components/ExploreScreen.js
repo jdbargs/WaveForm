@@ -39,27 +39,47 @@ export default function ExploreScreen() {
   const soundRef = useRef(null);
 
   // Viewability config and handler for both lists
-  const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 80 });
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems.length === 0) return;
-    const idx = viewableItems[0].index;
-    const post = postsRef.current[idx];
+  const viewConfig = { viewAreaCoveragePercentThreshold: 80 };
+  
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }) => {
+      // Don’t do anything if screen isn’t focused or nothing is visible
+      if (!isFocused || viewableItems.length === 0) return;
 
-    (async () => {
-      if (!post || post.id === currentUserId) {
-        // either no post or it’s your own – don’t count it
-      } else {
-        // bump view_count atomically
-        const { error } = await supabase
-          .rpc('increment_post_view_count', { p_post_id: post.id });
-        if (error) console.warn('increment view RPC failed:', error.message);
-      }
-      if (idx !== playingIndex) {
+      const visibleIndexes = viewableItems.map(v => v.index);
+
+      // 1) If the currently playing item scrolled out of view, stop it
+      if (playingIndex !== null && !visibleIndexes.includes(playingIndex)) {
         unloadSound();
-        playSoundAtIndex(idx);
+        setPlayingIndex(null);
       }
-    })();
-  });
+
+      // 2) Autoplay the new first-visible item
+      const idx = visibleIndexes[0];
+      if (idx !== playingIndex) {
+        const post = postsRef.current[idx];
+
+        (async () => {
+          // a) bump view_count if it’s not your own post
+          if (post && post.id !== currentUserId) {
+            try {
+              const { error } = await supabase
+                .rpc('increment_post_view_count', { p_post_id: post.id });
+              if (error) console.warn('RPC error incrementing views:', error.message);
+            } catch (err) {
+              console.warn('RPC exception incrementing views:', err);
+            }
+          }
+
+          // b) unload any existing sound then play the new one
+          await unloadSound();
+          await playSoundAtIndex(idx);
+        })();
+      }
+    },
+    [isFocused, currentUserId, playingIndex]
+  );
+
 
   // Keep postsRef in sync
   useEffect(() => { postsRef.current = posts; }, [posts]);
@@ -80,6 +100,15 @@ export default function ExploreScreen() {
       setFollowingIds(new Set(followData.map(f => f.followed_id)));
     })();
   }, [isFocused]);
+
+  // whenever the Explore tab loses focus, stop & unload the audio
+  useEffect(() => {
+    if (!isFocused) {
+      unloadSound();
+      setPlayingIndex(null);
+    }
+  }, [isFocused]);
+
 
   // User search effect
   useEffect(() => {
@@ -230,8 +259,8 @@ export default function ExploreScreen() {
               snapToAlignment="center"
               decelerationRate="fast"
               showsVerticalScrollIndicator={false}
-              viewabilityConfig={viewConfig.current}
-              onViewableItemsChanged={onViewableItemsChanged.current}
+              viewabilityConfig={viewConfig}
+              onViewableItemsChanged={onViewableItemsChanged}
             />
           )
         )}
