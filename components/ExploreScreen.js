@@ -43,10 +43,22 @@ export default function ExploreScreen() {
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length === 0) return;
     const idx = viewableItems[0].index;
-    if (idx !== playingIndex) {
-      unloadSound();
-      playSoundAtIndex(idx);
-    }
+    const post = postsRef.current[idx];
+
+    (async () => {
+      if (!post || post.id === currentUserId) {
+        // either no post or it’s your own – don’t count it
+      } else {
+        // bump view_count atomically
+        const { error } = await supabase
+          .rpc('increment_post_view_count', { p_post_id: post.id });
+        if (error) console.warn('increment view RPC failed:', error.message);
+      }
+      if (idx !== playingIndex) {
+        unloadSound();
+        playSoundAtIndex(idx);
+      }
+    })();
   });
 
   // Keep postsRef in sync
@@ -105,15 +117,26 @@ export default function ExploreScreen() {
   // Fetch popular posts
   const fetchPopularPosts = useCallback(async () => {
     setLoadingPosts(true);
+
+    // SIMPLE test: grab everything
     const { data, error } = await supabase
       .from('posts')
-      .select('id, audio_url, view_count, users(username)')
-      .eq('is_active', true)
+      .select(`
+        id,
+        audio_url,
+        view_count,
+        author:users!posts_user_id_fkey(username)
+      `)              
       .order('view_count', { ascending: false })
+      .eq('is_public', true)
       .limit(100);
-    if (!error && data) setPosts(data);
+
+    console.log('🔍 fetchPopularPosts raw →', { data, error });
+    if (error) console.error('fetchPopularPosts error:', error.message);
+    setPosts(data || []);
     setLoadingPosts(false);
   }, []);
+
 
   // Load posts when search is empty
   useEffect(() => {
@@ -165,7 +188,7 @@ export default function ExploreScreen() {
   // Render post item
   const renderPost = ({ item, index }) => (
     <View style={[styles.page, { backgroundColor: t.colors.background }]}> 
-      <Text style={[styles.label, { color: t.colors.text, fontFamily: t.font.family }]}>▶ {item.users?.username}'s Post ({item.view_count} views)</Text>
+      <Text style={[styles.label, { color: t.colors.text, fontFamily: t.font.family }]}>▶ {item.author?.username}'s Post ({item.view_count} views)</Text>
       <Win95Button title={playingIndex === index && isPlaying ? '❚❚' : '▶'} onPress={() => togglePlayPause(index)} />
     </View>
   );

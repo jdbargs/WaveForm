@@ -108,7 +108,12 @@ export default function FeedScreen() {
 
     const { data: feedPosts = [] } = await supabase
       .from('posts')
-      .select('id, name, audio_url, waveform, user_id, users(username)')
+      .select(`
+        id,
+        audio_url,
+        view_count,
+        author:users!posts_user_id_fkey(username)
+      `)    
       .in('user_id', ids)
       .eq('is_public', true)
       .eq('is_active', true)
@@ -227,7 +232,7 @@ export default function FeedScreen() {
 
   // render each post
   const renderItem = ({ item, index }) => {
-    const username = item.users?.username || 'Unknown';
+    const username = item.author?.username || 'Unknown'
     const rawWaveform = Array.isArray(item.waveform) && item.waveform.length
       ? item.waveform
       : Array.from({ length: 50 }, () => Math.random());
