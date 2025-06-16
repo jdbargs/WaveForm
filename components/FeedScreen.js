@@ -115,62 +115,107 @@ export default function FeedScreen() {
     setPosts(feedPosts);
   }
 
-  // unload audio
+  // returns a local file:// URI, downloading once if passed an http URL
+  // simplified helper
+  async function preparePlaybackUri(uri) {
+    if (uri.startsWith('file://')) return uri;
+    const filename = uri.split('/').pop().split('?')[0];
+    const localUri = FileSystem.documentDirectory + filename;
+    const info = await FileSystem.getInfoAsync(localUri);
+    if (!info.exists) {
+      await FileSystem.downloadAsync(uri, localUri);
+    }
+    return localUri;
+  }
+
+
+
   async function unloadSound() {
-    if (soundRef.current) {
-      try {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-      } catch {};
-      soundRef.current = null;
+    // grab a copy of the ref, then clear it immediately
+    const sound = soundRef.current;
+    soundRef.current = null;
+
+    if (!sound) {
+      // nothing to unload
+      setPlayingIndex(null);
+      setIsPlaying(false);
+      return;
+    }
+
+    try {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+    } catch (e) {
+      console.warn('Error unloading sound:', e);
+    } finally {
       setPlayingIndex(null);
       setIsPlaying(false);
     }
   }
 
+
   // play by index
   async function playSoundAtIndex(index) {
-    if (index < 0 || index >= postsRef.current.length) return;
-    const uri = postsRef.current[index].audio_url;
-    if (!uri) return;
+    const post = postsRef.current[index];
+    if (!post?.audio_url) return;
 
+    // 1) Switch into playback mode
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true
+    });
+
+    // 2) Unload any previous sound
     await unloadSound();
 
-    let uriToPlay = uri;
-    if (uri.startsWith('http')) {
-      const filename = uri.split('/').pop();
-      const localUri = FileSystem.documentDirectory + filename;
-      const info = await FileSystem.getInfoAsync(localUri);
-      if (!info.exists) {
-        await FileSystem.downloadAsync(uri, localUri);
-      }
-      uriToPlay = localUri;
-    }
+    // 3) Download the remote file to a truly local path
+    let localUri;
     try {
-      if (!uriToPlay) {
-        console.error('No URI to play.');
-        return;
+      const remoteUrl = post.audio_url;
+      const filename = remoteUrl
+        .split("/")
+        .pop()
+        .split("?")[0];              // e.g. "abcd.mp3"
+      localUri = `${FileSystem.documentDirectory}${filename}`;
+
+      const info = await FileSystem.getInfoAsync(localUri, { size: true });
+      if (!info.exists) {
+        console.log("Downloading to:", localUri);
+        await FileSystem.downloadAsync(remoteUrl, localUri);
+        const newInfo = await FileSystem.getInfoAsync(localUri, { size: true });
+        console.log("Downloaded size:", newInfo.size, "bytes");
+      } else {
+        console.log("Using cached file, size:", info.size, "bytes");
       }
-      const { sound } = await Audio.Sound.createAsync(
-        { uriToPlay },
+    } catch (err) {
+      console.error("Download error:", err);
+      alert("Could not download audio for playback.");
+      return;
+    }
+
+    // 4) Play from that local file
+    try {
+      const { sound: newSound, status } = await Audio.Sound.createAsync(
+        { uri: localUri },
         { shouldPlay: true }
       );
-      soundRef.current = sound;
-      sound.setOnPlaybackStatusUpdate(status => {
-        if (status.isPlaying) {
-          setPlayingIndex(index);
-          setIsPlaying(true);
-        } else if (!status.isPlaying && !status.isBuffering) {
-          unloadSound();
-        }
+      console.log("Playback loaded:", status);
+      soundRef.current = newSound;
+      setPlayingIndex(index);
+      setIsPlaying(true);
+
+      newSound.setOnPlaybackStatusUpdate(s => {
+        if (s.didJustFinish) unloadSound();
       });
-    } catch (e) {
-      console.error('Play error:', e);
+    } catch (err) {
+      console.error("Playback error:", err);
+      alert("Playback failed.");
     }
   }
 
-  // toggle
+  // add this immediately after:
   function togglePlayPause(index) {
+    // if the same clip is playing, pause it; otherwise start it
     if (playingIndex === index && isPlaying) {
       soundRef.current?.pauseAsync();
       setIsPlaying(false);

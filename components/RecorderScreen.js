@@ -56,19 +56,26 @@ export default function RecorderScreen() {
     }
   }
 
-  // Stop recording audio
+// Stop recording audio
   async function stopRecording() {
     if (!recording) return;
     try {
       await recording.stopAndUnloadAsync();
+      // 🔄 switch back into playback mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true
+      });
+
       const uri = recording.getURI();
       if (uri) setLastUri(uri);
       setIsRecording(false);
     } catch (err) {
-      console.error('Stop recording error:', err);
-      alert('Failed to stop recording.');
+      console.error("Stop recording error:", err);
+      alert("Failed to stop recording.");
     }
   }
+
 
   // Pick audio file from device
   async function pickFile() {
@@ -100,118 +107,139 @@ export default function RecorderScreen() {
     }
   }
 
-  // Play the last recorded or selected file
-  // Toggle playback: play, pause, or resume
   async function handleTogglePlayback() {
     if (!lastUri) {
-      alert('Nothing to play.');
+      alert("Nothing to play.");
       return;
     }
 
-    let uriToPlay = lastUri;
-
-    // If it's a remote URL, download to local first
-    if (lastUri.startsWith('http')) {
-      const filename = lastUri.split('/').pop();
-      const localUri = FileSystem.documentDirectory + filename;
-
-      try {
-        // only download if not already cached
-        const fileInfo = await FileSystem.getInfoAsync(localUri);
-        if (!fileInfo.exists) {
-          await FileSystem.downloadAsync(lastUri, localUri);
-        }
-        uriToPlay = localUri;
-      } catch (err) {
-        console.error('Download for playback failed:', err);
-        alert('Could not download file for playback.');
-        return;
-      }
+    // 1) Ensure we're in playback mode
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true
+      });
+    } catch (e) {
+      console.warn("Audio mode switch failed:", e);
     }
 
-    // Now toggle play/pause on the local file
-    try {
-      if (sound) {
-        const status = await sound.getStatusAsync();
-        if (status.isPlaying) {
-          await sound.pauseAsync();
-          setIsPlaying(false);
-          return;
-        } else {
-          await sound.playAsync();
-          setIsPlaying(true);
-          return;
-        }
-      }
+  // 1) If there’s already a sound loaded, just toggle pause/play
+  if (sound) {
+    const status = await sound.getStatusAsync();
+    if (status.isPlaying) {
+      await sound.pauseAsync();
+      setIsPlaying(false);
+      return;          // stop here, don’t unload
+    } else {
+      await sound.playAsync();
+      setIsPlaying(true);
+      return;          // resume playback without reloading
+    }
+  }
 
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: uriToPlay },
+    // 2) Unload any previous sound
+    if (sound) {
+      try {
+        await sound.unloadAsync();
+      } catch (e) {
+        console.warn("Error unloading previous sound:", e);
+      }
+      setSound(null);
+      setIsPlaying(false);
+    }
+
+    // 3) Create a new Sound and play it
+    try {
+      const { sound: newSound, status } = await Audio.Sound.createAsync(
+        { uri: lastUri },
         { shouldPlay: true }
       );
+      console.log("▶ createAsync status:", status);
       setSound(newSound);
       setIsPlaying(true);
 
-      newSound.setOnPlaybackStatusUpdate(status => {
-        if (status.didJustFinish) {
+      newSound.setOnPlaybackStatusUpdate(playbackStatus => {
+        console.log("▶ playback status update:", playbackStatus);
+        if (playbackStatus.didJustFinish) {
+          newSound.unloadAsync().catch(()=>{});
+          setSound(null);
           setIsPlaying(false);
         }
       });
     } catch (err) {
-      console.error('Playback error:', err);
-      alert('Playback failed.');
+      console.error("❌ Playback error in handleTogglePlayback:", err);
+      alert("Playback failed.");
     }
   }
 
 
-  // Upload audio to Supabase
-async function handleUpload() {
-  if (!lastUri) {
-    alert('Please record or upload a file first.');
-    return;
+
+  async function handleUpload() {
+    if (!lastUri) {
+      alert("Please record or upload a file first.");
+      return;
+    }
+    if (!postName.trim()) {
+      alert("Please enter a post name.");
+      return;
+    }
+    setUploading(true);
+
+    // 1) derive extension and filename
+    const ext = lastUri.split('.').pop().toLowerCase();           // e.g. "caf" or "m4a"
+    const filename = `${uuidv4()}.${ext}`;                        // <— this must run before you upload
+    const contentType =
+      ext === 'caf' ? 'audio/x-caf'
+      : ext === 'm4a' ? 'audio/m4a'
+      : `audio/${ext}`;
+
+    try {
+      // new code ↓
+      // 1) read the file into a Base64 string
+      const b64 = await FileSystem.readAsStringAsync(lastUri, {
+        encoding: FileSystem.EncodingType.Base64
+      });
+      // 2) turn that into a binary Buffer
+      const fileBuffer = Buffer.from(b64, 'base64');
+      // 3) upload the Buffer instead of a Blob
+      const { error: uploadError } = await supabase
+        .storage
+        .from('audio-posts')
+        .upload(filename, fileBuffer, { contentType });
+      if (uploadError) throw uploadError;
+
+      // 4) get a truly public URL
+      const { data: { publicUrl }, error: urlError } = supabase
+        .storage
+        .from("audio-posts")
+        .getPublicUrl(filename);
+      if (urlError) throw urlError;
+
+      console.log("Uploaded → publicUrl:", publicUrl);
+
+      // 5) insert post row
+      const {
+        data: { user },
+        error: userError
+      } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error("User not authenticated");
+
+      const { error: postError } = await supabase
+        .from("posts")
+        .insert([{ audio_url: publicUrl, user_id: user.id, name: postName }]);
+      if (postError) throw postError;
+
+      alert("Post created successfully!");
+      setLastUri(null);
+      setPostName("");
+    } catch (err) {
+      console.error("Upload failed:", err);
+      alert("Could not post audio.");
+    } finally {
+      setUploading(false);
+    }
   }
-  if (!postName.trim()) {
-    alert('Please enter a post name.');
-    return;
-  }
-  setUploading(true);
-  try {
-    // fetch the local file as a blob to preserve binary integrity
-    const response = await fetch(lastUri);
-    const blob = await response.blob();
 
-    const filename = `${uuidv4()}.m4a`;
-    const { error: uploadError } = await supabase.storage
-      .from('audio-posts')
-      .upload(filename, blob, { contentType: 'audio/m4a' });
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage.from('audio-posts').getPublicUrl(filename);
-    const publicURL = data.publicUrl;
-
-    // get user
-    const {
-      data: { user },
-      error: userError
-    } = await supabase.auth.getUser();
-    if (userError || !user) throw new Error('User not authenticated');
-
-    // insert post row
-    const { data: postData, error: postError } = await supabase
-      .from('posts')
-      .insert([{ audio_url: publicURL, user_id: user.id, name: postName }])
-      .select();
-    if (postError) throw postError;
-
-    alert('Post created successfully!');
-    setLastUri(null);
-    setPostName('');
-  } catch (err) {
-    console.error('Upload failed:', err);
-    alert('Could not post audio.');
-  } finally {
-    setUploading(false);
-  }
-}
 
 
   const styles = StyleSheet.create({
