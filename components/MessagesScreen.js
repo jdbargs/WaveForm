@@ -182,6 +182,20 @@ export default function MessagesScreen({ navigation }) {
     </View>
   );
 
+  const styles = StyleSheet.create({
+    safeArea: { flex: 1 },
+    container: { flex: 1 },
+    input: { height: 40, borderWidth: 1, paddingHorizontal: 8, marginBottom: 8 },
+    chatRow: { flexDirection: 'row', alignItems: 'center' },
+    emptyText: {
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.lg,      // or sm/md as you prefer
+      fontWeight: t.font.weight.bold,
+      color: t.colors.text,
+      textAlign: 'center',
+      marginTop: t.spacing.md,
+    },
+  });
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: t.colors.background }]}>
       <View style={[styles.container, { padding: t.spacing.md }]}>
@@ -251,7 +265,7 @@ export default function MessagesScreen({ navigation }) {
           keyExtractor={item => item.chat_id}
           renderItem={renderChat}
           ListEmptyComponent={
-            <Text style={[styles.empty, { color: t.colors.text }]}>
+            <Text style={styles.emptyText}>
               No chats yet.
             </Text>
           }
@@ -261,10 +275,4 @@ export default function MessagesScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  container: { flex: 1 },
-  input: { height: 40, borderWidth: 1, paddingHorizontal: 8, marginBottom: 8 },
-  chatRow: { flexDirection: 'row', alignItems: 'center' },
-  empty: { textAlign: 'center', marginTop: 16 }
-});
+

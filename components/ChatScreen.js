@@ -37,8 +37,14 @@ export default function ChatScreen({ route, navigation }) {
   const [uploading, setUploading] = useState(false);
   const recordingRef = useRef(null);
 
+  // for participants dropdown
   const [showUsers, setShowUsers] = useState(false);
   const [participants, setParticipants] = useState([]);
+
+  // for pause toggle
+  const [sound, setSound] = useState(null);
+  const [playingId, setPlayingId] = useState(null);
+
 
   // hide tab bar on this screen
   const defaultTabBarStyle = {
@@ -119,14 +125,15 @@ export default function ChatScreen({ route, navigation }) {
     });
   }, [navigation, t, showUsers]);
 
-  // subscribe & fetch messages
+  // replace your existing “subscribe & fetch messages” effect with this:
   useEffect(() => {
     supabase.removeAllChannels();
 
+    // move fetchMessages into this scope so we can call it on new inserts
     const fetchMessages = async () => {
       const { data, error } = await supabase
         .from('chat_messages')
-        .select('id, content, users(username)')
+        .select('id, content, users(username), created_at')  // ← include created_at
         .eq('chat_id', chatId)
         .order('created_at', { ascending: true });
 
@@ -134,8 +141,11 @@ export default function ChatScreen({ route, navigation }) {
         setMessages(data);
       }
     };
+
+    // initial load
     fetchMessages();
 
+    // on every new INSERT, re-fetch the full list
     const channel = supabase
       .channel(`chat_${chatId}`)
       .on(
@@ -146,12 +156,15 @@ export default function ChatScreen({ route, navigation }) {
           table: 'chat_messages',
           filter: `chat_id=eq.${chatId}`
         },
-        payload => setMessages(prev => [...prev, payload.new])
+        () => {
+          fetchMessages();  // ← get the real created_at now
+        }
       )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, [chatId]);
+
 
   // recording handlers
   const startRecording = async () => {
@@ -214,31 +227,86 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
-  // render each message
-  const renderItem = ({ item }) => (
-    <View style={styles.messageRow}>
-      <Text
-        style={{
-          fontFamily: t.font.family,
-          fontSize: t.font.sizes.xl,
-          fontWeight: 'bold',
-          color: t.colors.text,
-          marginRight: t.spacing.sm
-        }}
-      >
-        {item.users.username}:
-      </Text>
-      <Win95Button
-        title="▶ Play"
-        onPress={async () => {
-          const { sound } = await Audio.Sound.createAsync({
-            uri: item.content
-          });
-          await sound.playAsync();
-        }}
-      />
-    </View>
-  );
+  const handlePlayPause = async (message) => {
+    // If we’re already playing this message, pause it
+    if (playingId === message.id) {
+      await sound.pauseAsync();
+      setPlayingId(null);
+    } else {
+      // Otherwise unload any existing sound…
+      if (sound) {
+        await sound.unloadAsync();
+      }
+      // …then load & play the new one
+      const { sound: newSound } = await Audio.Sound.createAsync({
+        uri: message.content
+      });
+      setSound(newSound);
+      setPlayingId(message.id);
+
+      // When it finishes, reset the button
+      newSound.setOnPlaybackStatusUpdate(status => {
+        if (status.didJustFinish) {
+          setPlayingId(null);
+          newSound.unloadAsync();
+        }
+      });
+
+      await newSound.playAsync();
+    }
+  };
+
+  const renderItem = ({ item }) => {     
+    // NEW — default to '' so includes() never runs on undefined
+    const raw = item.created_at ?? '';
+    // if it’s "YYYY-MM-DD HH:MM:SS", turn it into an ISO string
+    const iso = raw.includes(' ') && !raw.includes('T')
+      ? raw.replace(' ', 'T') + 'Z'
+      : raw;
+    // if iso is empty, Date() will just be "Invalid Date" (no crash)
+    const d = new Date(iso);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const timeString = ` ${hh}:${mm}`;
+    const dateString = ` ${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+
+    return (
+      <View style={styles.messageRow}>
+        {/* 1) Username */}
+        <Text style={styles.usernameText}>
+          {item.users.username}:
+        </Text>
+
+        {/* 2) Play/Pause (taller) */}
+        <Win95Button
+          title={playingId === item.id ? '❚❚ Pause' : '▶ Play'}
+          onPress={() => handlePlayPause(item)}
+          style={{ height: t.dimensions.buttonHeight * 1.2 }}
+        />
+
+        {/* 3) Timestamp stacked in its own column, to the right */}
+        <View style={styles.timestampContainer}>
+          <Text
+            style={[
+              styles.timeText,
+              { fontSize: t.font.sizes.md }      // ← bump +2px
+            ]}    
+          >
+            {timeString}
+          </Text>
+          <Text
+            style={[
+              styles.dateText,
+              { fontSize: t.font.sizes.md }      // ← bump +2px
+            ]}
+          >
+            {dateString}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
 
 
   const styles = StyleSheet.create({
@@ -253,6 +321,29 @@ export default function ChatScreen({ route, navigation }) {
       flexDirection: 'row',
       justifyContent: 'center',
       borderTopWidth: 1
+    },
+    usernameText: {
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.xl,
+      fontWeight: 'bold',
+      color: t.colors.text,
+      marginRight: t.spacing.sm
+    },
+    playContainer: {
+      flexDirection: 'column',
+      alignItems: 'center',
+      marginLeft: t.spacing.sm
+    },
+    timeText: {
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.md,
+      color: t.colors.text,
+      marginTop: t.spacing.xs
+    },
+    dateText: {
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.md,
+      color: t.colors.text
     },
     userDropdown: {
       position: 'absolute',
