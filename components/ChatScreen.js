@@ -240,6 +240,53 @@ export default function ChatScreen({ route, navigation }) {
     </View>
   );
 
+
+  const styles = StyleSheet.create({
+    safeArea: { flex: 1 },
+    list: {},
+    messageRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8
+    },
+    controls: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      borderTopWidth: 1
+    },
+    userDropdown: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      width: 150,
+
+      backgroundColor: t.colors.buttonFace,    // ← theme light gray
+      borderWidth: 1,
+      borderColor: t.colors.buttonShadow,      // ← theme darker gray
+      borderRadius: 6,
+      maxHeight: 150,
+      paddingVertical: 4,
+
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
+
+      paddingVertical: 4,
+    },
+    userItem: {
+      backgroundColor: 't.colors.buttonFace',   // ← each item box is white
+      paddingVertical: 12,       // more tappable area
+      paddingHorizontal: 16,
+      fontSize: 18,              // ← bigger text
+      fontFamily: t.font.family,
+      // optional separator:
+      borderBottomWidth: 1,
+      borderBottomColor: 't.colors.buttonShadow',
+    },
+  });
+
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: t.colors.background }]}
@@ -259,8 +306,8 @@ export default function ChatScreen({ route, navigation }) {
           style={[
             styles.userDropdown,
             {
-              backgroundColor: t.colors.background,
-              borderColor: t.colors.border
+              backgroundColor: t.colors.buttonFace,
+              borderColor: t.colors.buttonShadow
             }
           ]}
         >
@@ -294,33 +341,4 @@ export default function ChatScreen({ route, navigation }) {
       </View>
     </SafeAreaView>
   );
-}
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  list: {},
-  messageRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8
-  },
-  controls: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    borderTopWidth: 1
-  },
-  userDropdown: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 88 : 56,
-    right: 16,
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    zIndex: 1000
-  },
-  userItem: {
-    paddingVertical: 4,
-    fontSize: 14
-  }
-});
+};
