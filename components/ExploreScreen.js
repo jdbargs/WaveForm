@@ -38,40 +38,26 @@ export default function ExploreScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const soundRef = useRef(null);
 
-  // Viewability config and handler for both lists
+  // Viewability config and handler
   const viewConfig = { viewAreaCoveragePercentThreshold: 80 };
-  
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }) => {
-      // Don’t do anything if screen isn’t focused or nothing is visible
       if (!isFocused || viewableItems.length === 0) return;
-
       const visibleIndexes = viewableItems.map(v => v.index);
 
-      // 1) If the currently playing item scrolled out of view, stop it
       if (playingIndex !== null && !visibleIndexes.includes(playingIndex)) {
         unloadSound();
         setPlayingIndex(null);
       }
 
-      // 2) Autoplay the new first-visible item
       const idx = visibleIndexes[0];
       if (idx !== playingIndex) {
         const post = postsRef.current[idx];
-
         (async () => {
-          // a) bump view_count if it’s not your own post
-          if (post && post.id !== currentUserId) {
-            try {
-              const { error } = await supabase
-                .rpc('increment_post_view_count', { p_post_id: post.id });
-              if (error) console.warn('RPC error incrementing views:', error.message);
-            } catch (err) {
-              console.warn('RPC exception incrementing views:', err);
-            }
+          if (post?.id !== currentUserId) {
+            await supabase
+              .rpc('increment_post_view_count', { p_post_id: post.id });
           }
-
-          // b) unload any existing sound then play the new one
           await unloadSound();
           await playSoundAtIndex(idx);
         })();
@@ -80,14 +66,8 @@ export default function ExploreScreen() {
     [isFocused, currentUserId, playingIndex]
   );
 
-
-  // Keep postsRef in sync
   useEffect(() => { postsRef.current = posts; }, [posts]);
-
-  // Audio silent mode
   useEffect(() => { Audio.setAudioModeAsync({ playsInSilentModeIOS: true }); }, []);
-
-  // Fetch current user and follows
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -100,8 +80,6 @@ export default function ExploreScreen() {
       setFollowingIds(new Set(followData.map(f => f.followed_id)));
     })();
   }, [isFocused]);
-
-  // whenever the Explore tab loses focus, stop & unload the audio
   useEffect(() => {
     if (!isFocused) {
       unloadSound();
@@ -109,8 +87,7 @@ export default function ExploreScreen() {
     }
   }, [isFocused]);
 
-
-  // User search effect
+  // Search users
   useEffect(() => {
     const q = searchQuery.trim();
     if (!q) { setUsers([]); return; }
@@ -129,7 +106,7 @@ export default function ExploreScreen() {
     return () => clearTimeout(timer);
   }, [searchQuery, currentUserId]);
 
-  // Toggle follow/unfollow
+  // Follow/unfollow
   const handleFollowToggle = async (id) => {
     if (!currentUserId) return;
     if (followingIds.has(id)) {
@@ -143,31 +120,28 @@ export default function ExploreScreen() {
     }
   };
 
-  // Fetch popular posts
+  // Fetch popular posts (include name + created_at)
   const fetchPopularPosts = useCallback(async () => {
     setLoadingPosts(true);
-
-    // SIMPLE test: grab everything
     const { data, error } = await supabase
       .from('posts')
       .select(`
         id,
+        name,
         audio_url,
         view_count,
+        created_at,
         author:users!posts_user_id_fkey(username)
-      `)              
+      `)
       .order('view_count', { ascending: false })
       .eq('is_public', true)
       .limit(100);
 
-    console.log('🔍 fetchPopularPosts raw →', { data, error });
-    if (error) console.error('fetchPopularPosts error:', error.message);
+    if (error) console.error(error);
     setPosts(data || []);
     setLoadingPosts(false);
   }, []);
 
-
-  // Load posts when search is empty
   useEffect(() => {
     if (!searchQuery.trim()) {
       fetchPopularPosts();
@@ -175,7 +149,7 @@ export default function ExploreScreen() {
     }
   }, [isFocused, searchQuery, fetchPopularPosts]);
 
-  // Unload audio
+  // Audio controls
   async function unloadSound() {
     if (soundRef.current) {
       await soundRef.current.stopAsync().catch(() => {});
@@ -184,7 +158,6 @@ export default function ExploreScreen() {
     }
   }
 
-  // Play sound at index
   async function playSoundAtIndex(index) {
     const uri = postsRef.current[index]?.audio_url;
     if (!uri) return;
@@ -197,42 +170,71 @@ export default function ExploreScreen() {
     });
   }
 
-  // Toggle play/pause
   function togglePlayPause(index) {
-    if (playingIndex === index && isPlaying) { soundRef.current.pauseAsync(); setIsPlaying(false); }
-    else { playSoundAtIndex(index); }
+    if (playingIndex === index && isPlaying) {
+      soundRef.current.pauseAsync();
+      setIsPlaying(false);
+    } else {
+      playSoundAtIndex(index);
+    }
   }
 
-  // Render user item
+  // Render user & post items
   const renderUser = ({ item }) => (
     <View style={styles.row}>
       <View style={styles.userInfo}>
-        <Text style={[styles.username, { color: t.colors.text, fontFamily: t.font.family }]}>{item.username}</Text>
-        <Text style={[styles.email, { color: t.colors.accentBlue, fontFamily: t.font.family }]}>{item.email}</Text>
+        <Text style={[styles.username, { color: t.colors.text, fontFamily: t.font.family }]}>
+          {item.username}
+        </Text>
+        <Text style={[styles.email, { color: t.colors.accentBlue, fontFamily: t.font.family }]}>
+          {item.email}
+        </Text>
       </View>
-      <Win95Button title={followingIds.has(item.id) ? 'Unfollow' : 'Follow'} onPress={() => handleFollowToggle(item.id)} />
+      <Win95Button
+        title={followingIds.has(item.id) ? 'Unfollow' : 'Follow'}
+        onPress={() => handleFollowToggle(item.id)}
+      />
     </View>
   );
 
-  // Render post item
   const renderPost = ({ item, index }) => (
-    <View style={[styles.page, { backgroundColor: t.colors.background }]}> 
-      <Text style={[styles.label, { color: t.colors.text, fontFamily: t.font.family }]}>▶ {item.author?.username}'s Post ({item.view_count} views)</Text>
-      <Win95Button title={playingIndex === index && isPlaying ? '❚❚' : '▶'} onPress={() => togglePlayPause(index)} />
+    <View style={[styles.page, { backgroundColor: t.colors.background }]}>
+      <Text style={[styles.label, { color: t.colors.text, fontFamily: t.font.family }]}>
+        ▶ {item.author?.username}'s Post ({item.view_count} views)
+      </Text>
+      <Win95Button
+        title={playingIndex === index && isPlaying ? '❚❚' : '▶'}
+        onPress={() => togglePlayPause(index)}
+      />
+      <Text style={[styles.postName, { color: t.colors.text, fontFamily: t.font.family }]}>
+        {item.name}
+      </Text>
+      <Text style={[styles.timestamp, { color: t.colors.text, fontFamily: t.font.family }]}>
+        {new Date(item.created_at).toLocaleString()}
+      </Text>
     </View>
   );
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: t.colors.background }]}> 
-      <View style={[styles.container, { padding: t.spacing.md }]}> 
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: t.colors.background }]}>
+      <View style={[styles.container, { padding: t.spacing.md }]}>
         <TextInput
           placeholder="Search users..."
           placeholderTextColor={t.colors.accentBlue}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          style={[styles.input, { borderColor: t.colors.buttonShadow, backgroundColor: t.colors.buttonFace, color: t.colors.text, fontFamily: t.font.family }]}
+          style={[
+            styles.input,
+            {
+              borderColor: t.colors.buttonShadow,
+              backgroundColor: t.colors.buttonFace,
+              color: t.colors.text,
+              fontFamily: t.font.family
+            }
+          ]}
           autoCapitalize="none"
         />
+
         {searchQuery.trim() ? (
           loadingUsers ? (
             <ActivityIndicator color={t.colors.text} style={styles.loading} />
@@ -241,28 +243,35 @@ export default function ExploreScreen() {
               data={users}
               keyExtractor={u => u.id}
               renderItem={renderUser}
-              viewabilityConfig={viewConfig.current}
-              onViewableItemsChanged={onViewableItemsChanged.current}
-              ListEmptyComponent={!loadingUsers && <Text style={[styles.noResults, { color: t.colors.text, fontFamily: t.font.family }]}>No users found.</Text>}
+              ListEmptyComponent={
+                !loadingUsers && (
+                  <Text
+                    style={[
+                      styles.noResults,
+                      { color: t.colors.text, fontFamily: t.font.family }
+                    ]}
+                  >
+                    No users found.
+                  </Text>
+                )
+              }
             />
           )
+        ) : loadingPosts ? (
+          <ActivityIndicator color={t.colors.text} style={styles.loading} />
         ) : (
-          loadingPosts ? (
-            <ActivityIndicator color={t.colors.text} style={styles.loading} />
-          ) : (
-            <FlatList
-              data={posts}
-              keyExtractor={item => item.id}
-              renderItem={renderPost}
-              pagingEnabled
-              snapToInterval={SCREEN_HEIGHT}
-              snapToAlignment="center"
-              decelerationRate="fast"
-              showsVerticalScrollIndicator={false}
-              viewabilityConfig={viewConfig}
-              onViewableItemsChanged={onViewableItemsChanged}
-            />
-          )
+          <FlatList
+            data={posts}
+            keyExtractor={item => item.id}
+            renderItem={renderPost}
+            pagingEnabled
+            snapToInterval={SCREEN_HEIGHT}
+            snapToAlignment="center"
+            decelerationRate="fast"
+            showsVerticalScrollIndicator={false}
+            viewabilityConfig={viewConfig}
+            onViewableItemsChanged={onViewableItemsChanged}
+          />
         )}
       </View>
     </SafeAreaView>
@@ -273,12 +282,33 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   container: { flex: 1 },
   input: { height: 40, borderWidth: 1, paddingHorizontal: 8, marginBottom: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1
+  },
   userInfo: { flex: 1, marginRight: 8 },
   username: { fontSize: 16 },
   email: { fontSize: 12 },
   loading: { marginVertical: 16 },
   noResults: { textAlign: 'center', marginTop: 20 },
-  page: { height: SCREEN_HEIGHT, justifyContent: 'center', alignItems: 'center', padding: 16 },
-  label: { marginBottom: 8, fontSize: 16 }
+  page: {
+    height: SCREEN_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16
+  },
+  label: { marginBottom: 8, fontSize: 16 },
+  postName: {
+    fontSize: 16,
+    marginTop: 8,
+    textAlign: 'center'
+  },
+  timestamp: {
+    fontSize: 14,
+    marginTop: 4,
+    textAlign: 'center'
+  }
 });

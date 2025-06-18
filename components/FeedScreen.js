@@ -47,20 +47,27 @@ export default function FeedScreen() {
       height: 40,
       marginBottom: t.spacing.md
     },
-    postName: {
-      color: t.colors.text,
-      fontFamily: t.font.family,
-      fontSize: t.font.sizes.body,
-      marginBottom: t.spacing.sm,
-      textAlign: 'center'
-    },
     controls: {
       flexDirection: 'row',
       justifyContent: 'center',
       padding: t.spacing.md,
       borderTopWidth: 1,
       borderColor: t.colors.buttonShadow
-    }
+    },
+    postName: {
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body,
+      marginBottom: t.spacing.sm,
+      textAlign: 'center',
+    },
+    timestamp: {
+      color: t.colors.text,
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.body,  // bump up if desired
+      marginTop: t.spacing.sm,
+      textAlign: 'center',
+    },
   });
 
   // viewability for autoplay
@@ -112,6 +119,8 @@ export default function FeedScreen() {
         id,
         audio_url,
         view_count,
+        name,
+        created_at,
         author:users!posts_user_id_fkey(username)
       `)    
       .in('user_id', ids)
@@ -240,7 +249,6 @@ export default function FeedScreen() {
     return (
       <View style={styles.page}>
         <Text style={styles.audioLabel}>▶ {username}'s Post:</Text>
-        <Text style={styles.postName}>{item.name}</Text>
 
         {/* Waveform bar graph */}
         <View style={styles.waveformContainer}>
@@ -263,6 +271,11 @@ export default function FeedScreen() {
             onPress={() => togglePlayPause(index)}
           />
         </View>
+
+        <Text style={styles.postName}>{item.name}</Text>
+        <Text style={styles.timestamp}>
+          {new Date(item.created_at).toLocaleString()}
+        </Text>
       </View>
     );
   };
