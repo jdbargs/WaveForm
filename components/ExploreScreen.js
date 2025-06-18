@@ -29,6 +29,8 @@ export default function ExploreScreen() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [followingIds, setFollowingIds] = useState(new Set());
+  const focusTimestampRef = useRef(0);
+
 
   // Popular posts state
   const [posts, setPosts] = useState([]);
@@ -42,6 +44,10 @@ export default function ExploreScreen() {
   const viewConfig = { viewAreaCoveragePercentThreshold: 80 };
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }) => {
+      if (Date.now() - focusTimestampRef.current < 500) {
+        return; // ignore any autoplay events during this buffer
+      }
+      
       if (!isFocused || viewableItems.length === 0) return;
       const visibleIndexes = viewableItems.map(v => v.index);
 
@@ -105,6 +111,18 @@ export default function ExploreScreen() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, currentUserId]);
+
+  useEffect(() => {
+  if (isFocused) {
+    // record when we just became focused
+    focusTimestampRef.current = Date.now();
+  } else {
+    // immediate hard cutoff on blur
+    unloadSound();
+    setPlayingIndex(null);
+  }
+}, [isFocused]);
+
 
   // Follow/unfollow
   const handleFollowToggle = async (id) => {
