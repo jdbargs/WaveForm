@@ -38,6 +38,7 @@ export default function MyPostsScreen() {
   const t = useTheme();
   // at the top of MyPostsScreen.js
   const [desktopHeight, setDesktopHeight] = useState(0);
+  const [upRect, setUpRect] = useState(null);
   // inside MyPostsScreen, after const [desktopHeight,...]
   const containerWidth  = WINDOW_WIDTH;
   const containerHeight = desktopHeight ||
@@ -129,6 +130,9 @@ export default function MyPostsScreen() {
   // Desktop navigation
   const [folderStack, setFolderStack] = useState([null]);
   const currentFolderId = folderStack[folderStack.length - 1];
+  const parentFolder = folderStack.length > 1
+    ? folderStack[folderStack.length - 2]
+    : null;
   const goUp = () =>
     folderStack.length > 1 && setFolderStack((s) => s.slice(0, -1));
 
@@ -219,8 +223,8 @@ export default function MyPostsScreen() {
 
     // helper to clamp a single position
     const clampPos = ({ x, y }) => ({
-      x: clamp(x, 0, containerW - ICON_SIZE),
-      y: clamp(y, 0, containerH - ICON_SIZE),
+      x: clamp(x, 0, containerWidth  - ICON_SIZE),
+      y: clamp(y, 0, containerHeight - ICON_SIZE),
     });
 
     // clamp posts
@@ -379,6 +383,35 @@ export default function MyPostsScreen() {
     }
   };
 
+  // inside MyPostsScreen
+
+// 1️⃣ build this handler once per render:
+  const handleDragEnd = useCallback(
+    (id, pos, type) => {
+      // first, move the icon
+      updatePosition(id, pos, type);
+
+      // then see if we dropped over any folder
+      for (const { id: folderId, x, y, width, height } of folderRects) {
+        // e.g. test the center of the icon
+        const cx = pos.x + ICON_SIZE/2;
+        const cy = pos.y + ICON_SIZE/2;
+
+        if (
+          cx >= x &&
+          cx <= x + width &&
+          cy >= y &&
+          cy <= y + height
+        ) {
+          // bingo—move it into that folder
+          moveIntoFolder(id, folderId, type);
+          break;
+        }
+      }
+    },
+    [folderRects, updatePosition, moveIntoFolder]
+  );
+
   // Visible
   const visibleFolders = folders.filter((f) => f.parentFolderId === currentFolderId);
   const visiblePosts = posts.filter((p) => p.parentFolderId === currentFolderId);
@@ -418,7 +451,22 @@ export default function MyPostsScreen() {
 
       {/* Breadcrumb + New Folder */}
       <View style={styles.breadcrumb}>
-        {folderStack.length > 1 && <Win95Button title="<" onPress={goUp} />}
+        {folderStack.length > 1 && (
+          <View
+            onLayout={e => {
+              const { x, y, width, height } = e.nativeEvent.layout;
+              // `y` is relative to breadcrumb; desktopContainer starts BREADCRUMB_HEIGHT below it
+              setUpRect({
+                x,
+                y: y - BREADCRUMB_HEIGHT,
+                width,
+                height,
+              });
+            }}
+          >
+            <Win95Button title="<" onPress={goUp} />
+          </View>
+        )}
         <Win95Button onPress={createFolder}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={{ marginRight: 6, fontSize: 22, marginTop: -7 }}>+</Text>
@@ -455,14 +503,16 @@ export default function MyPostsScreen() {
                   ? setFolderStack((s) => [...s, item.id])
                   : handlePlayPause(item.audio_url, absoluteIndex)
               }
-              onDragEnd={(id, pos) => updatePosition(id, pos, item.type)}
+              onDragEnd={(id, pos) => handleDragEnd(id, pos, item.type)}
+              onTrashDrop={handleTrashDrop}
+              onDropOnBack={id => moveIntoFolder(id, parentFolder, item.type)}
+              onRenameDrop={handleRenameDrop}
               onDropOnFolder={(id, folderId) =>
                 moveIntoFolder(id, folderId, item.type)
               }
-              onTrashDrop={handleTrashDrop}
-              onRenameDrop={handleRenameDrop}
               folderRects={folderRects}
               trashRect={trashRect}
+              backRect={upRect}
               portalRect={portalRect}
             />
           );

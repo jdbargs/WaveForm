@@ -41,12 +41,21 @@ export default function ExploreScreen() {
   const soundRef = useRef(null);
 
   // Viewability config and handler
-  const viewConfig = { viewAreaCoveragePercentThreshold: 80 };
+  const viewConfig = useRef({
+    viewAreaCoveragePercentThreshold: 80,
+  }).current;
+
+  // 2) stable no-op for the user list
+  const noop = useCallback(() => {}, []);
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }) => {
-      if (Date.now() - focusTimestampRef.current < 500) {
-        return; // ignore any autoplay events during this buffer
-      }
+        // ignore during our focus-buffer
+      if (Date.now() - focusTimestampRef.current < 500) return;
+
+      // ignore if user is actively searching
+      if (searchQuery.trim()) return;
+
+      if (!isFocused || viewableItems.length === 0) return;
       
       if (!isFocused || viewableItems.length === 0) return;
       const visibleIndexes = viewableItems.map(v => v.index);
@@ -69,7 +78,7 @@ export default function ExploreScreen() {
         })();
       }
     },
-    [isFocused, currentUserId, playingIndex]
+    [searchQuery, isFocused, currentUserId, playingIndex]
   );
 
   useEffect(() => { postsRef.current = posts; }, [posts]);
@@ -273,6 +282,8 @@ export default function ExploreScreen() {
                   </Text>
                 )
               }
+              viewabilityConfig={viewConfig}
+              onViewableItemsChanged={noop}
             />
           )
         ) : loadingPosts ? (

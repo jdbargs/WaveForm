@@ -9,16 +9,18 @@ import {
   TouchableWithoutFeedback
 } from 'react-native';
 
-const ICON_SIZE = 64;
+const ICON_SIZE = 80;
 
 export default function DesktopIcon({
   item,
   onPress,
   onDragEnd,
-  onDropOnFolder,
+  onDropOnFolder = () => {},
   onTrashDrop,
+  onDropOnBack = () => {},
   folderRects = [],
-  trashRect
+  trashRect,
+  backRect = null
 }) {
   // Animated value for position
   // ensure we always have numeric x & y
@@ -69,6 +71,15 @@ export default function DesktopIcon({
       onPanResponderRelease: () => {
         pan.flattenOffset();
         const newPos = { x: pan.x._value, y: pan.y._value };
+        const cx = newPos.x + ICON_SIZE/2;
+        const cy = newPos.y + ICON_SIZE/2;
+
+        // 0) Dropped on Up‐arrow? (move back to parent)
+        if (backRect && cx >= backRect.x && cx <= backRect.x + backRect.width &&
+            cy >= backRect.y && cy <= backRect.y + backRect.height) {
+          onDropOnBack(item.id);
+          return;
+        }
 
         // 1) Trash drop?
         if (isOverTrash(newPos)) {
