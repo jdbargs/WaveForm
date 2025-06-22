@@ -21,10 +21,42 @@ import ChatScreen from './components/ChatScreen';
 import { supabase } from './lib/supabase';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ThemeProvider } from './ThemeContext';
+import SettingsScreen   from './components/SettingsScreen';
 import Win95Button from './components/Win95Button';
 
 // Import mail icon for header
 import MailIcon from './assets/images/mail.png';
+
+const ProfileStack = createNativeStackNavigator();
+function ProfileStackScreen() {
+  return (
+    <ProfileStack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: theme.colors.buttonFace,
+          borderBottomWidth: theme.border.width,
+          borderBottomColor: theme.colors.buttonShadow,
+        },
+        headerTitleStyle: {
+          fontFamily: theme.font.family,
+          fontSize: theme.font.sizes.header,
+          color: theme.colors.text,
+        },
+      }}
+    >
+      <ProfileStack.Screen
+        name="MyPosts"
+        component={MyPostsScreen}
+        options={{ title: 'You' }}
+      />
+      <ProfileStack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ title: 'Settings' }}
+      />
+    </ProfileStack.Navigator>
+  );
+}
 
 // Feed Stack
 const FeedStack = createNativeStackNavigator();
@@ -155,7 +187,10 @@ export default function App() {
             />
             <Tab.Screen name="World" component={ExploreScreen} />
             <Tab.Screen name="Post" component={RecorderScreen} />
-            <Tab.Screen name="You" component={MyPostsScreen} />
+            <Tab.Screen 
+              name="You"
+              component={ProfileStackScreen}
+            />
           </Tab.Navigator>
         )}
       </NavigationContainer>

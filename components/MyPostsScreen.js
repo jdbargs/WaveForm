@@ -421,13 +421,13 @@ export default function MyPostsScreen() {
   const folderRects = visibleFolders.map((f) => ({ id: f.id, x: f.position.x, y: f.position.y, width: ICON_SIZE, height: ICON_SIZE }));
   const trashRect = {
     x: WINDOW_WIDTH - ICON_SIZE - TRASH_MARGIN,
-    y: (desktopHeight - ICON_SIZE - TRASH_MARGIN) / 1.15,
+    y: (desktopHeight - ICON_SIZE - TRASH_MARGIN),
     width: ICON_SIZE + DROP_PADDING,
     height: ICON_SIZE + DROP_PADDING,
   };
   const portalRect = {
     x: TRASH_MARGIN - DROP_PADDING,
-    y: (desktopHeight - ICON_SIZE - TRASH_MARGIN) / 1.15,
+    y: (desktopHeight - ICON_SIZE - TRASH_MARGIN),
     width: ICON_SIZE + DROP_PADDING,
     height: ICON_SIZE + DROP_PADDING,
   };
