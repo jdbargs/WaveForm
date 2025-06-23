@@ -47,12 +47,40 @@ function ProfileStackScreen() {
       <ProfileStack.Screen
         name="MyPosts"
         component={MyPostsScreen}
-        options={{ title: 'You' }}
+        options={({ navigation }) => ({
+          // 1) hide the built-in back arrow…
+          headerBackVisible: false,
+          // 2) …and hide its "back title" ("My Posts")
+          headerBackTitleVisible: false,
+          // 3) now supply your Win95Button instead
+          headerLeft: () => (
+            <Win95Button
+              title="You"
+              onPress={() => navigation.navigate('You')}
+              // if you need spacing, we'll forward a style prop below
+              style={{ marginLeft: theme.spacing.sm }}
+            />
+          ),
+        })}
       />
+
       <ProfileStack.Screen
         name="Settings"
         component={SettingsScreen}
-        options={{ title: 'Settings' }}
+        options={({ navigation }) => ({
+          title: 'Settings',
+          // hide the default back indicator + label
+          headerBackVisible: false,
+          headerBackTitleVisible: false,
+          // inject our Win95 “You” button
+          headerLeft: () => (
+            <Win95Button
+              title="<"
+              onPress={() => navigation.navigate('MyPosts')}
+              style={{ marginLeft: theme.spacing.sm }}
+            />
+          ),
+        })}
       />
     </ProfileStack.Navigator>
   );

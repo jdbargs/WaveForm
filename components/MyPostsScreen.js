@@ -39,6 +39,7 @@ export default function MyPostsScreen() {
   // at the top of MyPostsScreen.js
   const [desktopHeight, setDesktopHeight] = useState(0);
   const [upRect, setUpRect] = useState(null);
+  const [trashRect, setTrashRect] = useState(null);
   // inside MyPostsScreen, after const [desktopHeight,...]
   const containerWidth  = WINDOW_WIDTH;
   const containerHeight = desktopHeight ||
@@ -47,7 +48,9 @@ export default function MyPostsScreen() {
 
   // Tab title
   useLayoutEffect(() => {
-    navigation.setOptions({ title: 'You' });
+    navigation.setOptions({
+      headerShown: false
+    });
   }, [navigation]);
 
   // Auth/profile
@@ -385,32 +388,73 @@ export default function MyPostsScreen() {
 
   // inside MyPostsScreen
 
-// 1️⃣ build this handler once per render:
+  // 1️⃣ build this handler once per render:
   const handleDragEnd = useCallback(
-    (id, pos, type) => {
-      // first, move the icon
-      updatePosition(id, pos, type);
+    (id, rawPos, type) => {
+      // clamp & reposition as you already do
+      updatePosition(id, rawPos, type);
 
-      // then see if we dropped over any folder
-      for (const { id: folderId, x, y, width, height } of folderRects) {
-        // e.g. test the center of the icon
-        const cx = pos.x + ICON_SIZE/2;
-        const cy = pos.y + ICON_SIZE/2;
+      if (!trashRect) return;
+      // compute icon center
+      const cx = rawPos.x + ICON_SIZE / 2;
+      const cy = rawPos.y + ICON_SIZE / 2;
 
+      console.log(
+        `[DragEnd] ${type} ${id} dropped at center (${cx.toFixed(0)},${cy.toFixed(0)})`
+      );
+
+      // check trash zone first
+      if (
+        cx >= trashRect.x &&
+        cx <= trashRect.x + trashRect.width &&
+        cy >= trashRect.y &&
+        cy <= trashRect.y + trashRect.height
+      ) {
+        console.log('[DragEnd] → in TRASH zone!');
+        // optionally confirm to avoid accidents:
+        Alert.alert(
+          'Delete?',
+          `Permanently delete this ${type}?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'OK',
+              onPress: () => handleTrashDrop(id, type)
+            }
+          ]
+        );
+        return;
+      }
+
+      // then portal zone
+      if (
+        cx >= portalRect.x &&
+        cx <= portalRect.x + portalRect.width &&
+        cy >= portalRect.y &&
+        cy <= portalRect.y + portalRect.height
+      ) {
+        console.log('[DragEnd] → in PORTAL zone!');
+        handleDropOnBack(id); // or whatever portal logic you want
+        return;
+      }
+
+      // then folders
+      for (const { id: fid, x, y, width, height } of folderRects) {
         if (
           cx >= x &&
           cx <= x + width &&
           cy >= y &&
           cy <= y + height
         ) {
-          // bingo—move it into that folder
-          moveIntoFolder(id, folderId, type);
-          break;
+          console.log(`[DragEnd] → into folder ${fid}`);
+          moveIntoFolder(id, fid, type);
+          return;
         }
       }
     },
-    [folderRects, updatePosition, moveIntoFolder]
+    [trashRect, portalRect, folderRects, updatePosition, moveIntoFolder]
   );
+
 
   // Visible
   const visibleFolders = folders.filter((f) => f.parentFolderId === currentFolderId);
@@ -419,12 +463,6 @@ export default function MyPostsScreen() {
 
   // Drop zones
   const folderRects = visibleFolders.map((f) => ({ id: f.id, x: f.position.x, y: f.position.y, width: ICON_SIZE, height: ICON_SIZE }));
-  const trashRect = {
-    x: WINDOW_WIDTH - ICON_SIZE - TRASH_MARGIN,
-    y: (desktopHeight - ICON_SIZE - TRASH_MARGIN),
-    width: ICON_SIZE + DROP_PADDING,
-    height: ICON_SIZE + DROP_PADDING,
-  };
   const portalRect = {
     x: TRASH_MARGIN - DROP_PADDING,
     y: (desktopHeight - ICON_SIZE - TRASH_MARGIN),
@@ -432,7 +470,14 @@ export default function MyPostsScreen() {
     height: ICON_SIZE + DROP_PADDING,
   };
 
-  const styles = StyleSheet.create({ safeArea: { flex: 1, backgroundColor: t.colors.background }, header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: t.colors.buttonFace, borderBottomWidth: t.border.width, borderBottomColor: t.colors.buttonShadow, padding: t.spacing.sm }, usernameInput: { flex: 1, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.header, fontWeight: t.font.weight.bold, borderBottomWidth: t.border.width, borderBottomColor: t.colors.buttonShadow, marginRight: t.spacing.sm }, postCount: { color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body }, breadcrumb: { flexDirection: 'row', alignItems: 'center', padding: t.spacing.sm, backgroundColor: t.colors.background }, breadcrumbText: { marginLeft: t.spacing.sm, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body }, desktopContainer: { flex: 1, backgroundColor: t.colors.background, position: 'relative' } });
+  const styles = StyleSheet.create({ 
+    safeArea: { flex: 1, backgroundColor: t.colors.background }, 
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: t.colors.buttonFace, borderBottomWidth: t.border.width, borderBottomColor: t.colors.buttonShadow, padding: t.spacing.sm }, 
+    usernameInput: { flex: 1, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.header, fontWeight: t.font.weight.bold, borderBottomWidth: t.border.width, borderBottomColor: t.colors.buttonShadow, marginRight: t.spacing.sm }, 
+    postCount: { color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body }, 
+    breadcrumb: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: t.spacing.sm, backgroundColor: t.colors.background }, 
+    breadcrumbText: { marginLeft: t.spacing.sm, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body }, desktopContainer: { flex: 1, backgroundColor: t.colors.background, position: 'relative' } 
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -481,14 +526,44 @@ export default function MyPostsScreen() {
             ? 'Home'
             : folders.find((f) => f.id === currentFolderId)?.name}
        </Text>
+      <Win95Button onPress={() => navigation.navigate('Settings')}>
+        <Image
+          source={require('../assets/images/gear.png')}
+          style={{ width: 25, height: 25, resizeMode: 'contain' }}
+          />
+      </Win95Button>
       </View>
-
 
       {/* Desktop icons + debug overlays */}
       <View
         style={styles.desktopContainer}
         onLayout={(e) => setDesktopHeight(e.nativeEvent.layout.height)}
       >
+        {/* DEBUG: show trash & portal drop zones */}
+        {trashRect && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: trashRect.x,
+              top:  trashRect.y,
+              width: trashRect.width,
+              height:trashRect.height,
+              backgroundColor: 'rgba(255, 0, 0, 0.3)'
+            }}
+          />
+        )}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: portalRect.x,
+            top: portalRect.y,
+            width: portalRect.width,
+            height: portalRect.height,
+            backgroundColor: 'rgba(0, 0, 255, 0.3)'
+          }}
+        />
         {visibleItems.map((item) => {
           const absoluteIndex =
             item.type === 'file'
@@ -520,6 +595,9 @@ export default function MyPostsScreen() {
         {/* Trash Icon */}
         <Image
           source={require('../assets/images/trash.png')}
+          onLayout={e => {
+            setTrashRect(e.nativeEvent.layout);
+          }}
           style={{
             position: 'absolute',
             width: ICON_SIZE,
