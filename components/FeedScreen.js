@@ -1,5 +1,5 @@
 // components/FeedScreen.js
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   FlatList,
@@ -21,10 +21,20 @@ export default function FeedScreen() {
   const t = useTheme();
   const isFocused = useIsFocused();
   const [posts, setPosts] = useState([]);
-  const postsRef = useRef(posts);
+  const postsRef = useRef([]);  
   const [playingIndex, setPlayingIndex] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setCurrentUserId(user.id);
+    });
+  }, []);
   const soundRef = useRef(null);
+
+  useEffect(() => {
+    postsRef.current = posts;
+  }, [posts]);
 
   // dynamic styles using theme
   const styles = StyleSheet.create({
@@ -70,20 +80,33 @@ export default function FeedScreen() {
     },
   });
 
+  const viewConfig = { viewAreaCoveragePercentThreshold: 80 };
   // viewability for autoplay
-  const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 80 });
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems.length === 0) return;
-    const idx = viewableItems[0].index;
-    if (idx !== playingIndex) {
-      unloadSound();
-      playSoundAtIndex(idx);
-    }
-  });
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }) => {
+      if (!viewableItems || viewableItems.length === 0) return;
 
-  useEffect(() => {
-    postsRef.current = posts;
-  }, [posts]);
+      const idx = viewableItems[0].index;
+      if (idx === playingIndex) return;
+
+      const post = postsRef.current[idx];
+        if (post && post.id !== currentUserId) {
+          console.log('[FeedScreen] bumping view_count for', post.id);
+            supabase
+              .rpc('increment_post_view_count', { p_post_id: post.id })
+              .then(({ data, error }) => {
+                if (error) {
+                  console.warn('[FeedScreen] RPC error:', error);
+                } else {
+                  console.log('[FeedScreen] RPC OK, returned:', data);
+                }
+              });
+        }
+      togglePlayPause(idx);
+    },
+    [currentUserId, playingIndex]
+  );
+
 
   // silent mode
   useEffect(() => {
@@ -291,8 +314,8 @@ export default function FeedScreen() {
         snapToAlignment="center"
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
-        onViewableItemsChanged={onViewableItemsChanged.current}
-        viewabilityConfig={viewConfig.current}
+        viewabilityConfig={viewConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
       />
     </View>
   );
