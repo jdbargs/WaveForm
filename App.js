@@ -166,15 +166,42 @@ export default function App() {
 
   const buttonSize = theme.dimensions.buttonHeight * 3;
   const defaultTabBarStyle = {
-    position: 'absolute',
-    bottom: theme.spacing.sm,
-    left: theme.spacing.sm,
-    right: theme.spacing.sm,
     backgroundColor: theme.colors.buttonFace,
     borderTopWidth: theme.border.width,
     borderTopColor: theme.colors.buttonShadow,
     height: buttonSize,
   };
+
+  // common tab options (icon, colors, item style, etc.)
+  const commonOptions = ({ route }) => ({
+    tabBarIcon: ({ color }) => {
+      let iconName = 'ellipse';
+      if (route.name === 'Feed') iconName = 'play-outline';
+      if (route.name === 'World') iconName = 'search-outline';
+      if (route.name === 'Post') iconName = 'add-circle-outline';
+      if (route.name === 'You') iconName = 'person-outline';
+      return <Ionicons name={iconName} size={14} color={color} />;
+    },
+    tabBarActiveTintColor: theme.colors.text,
+    tabBarInactiveTintColor: theme.colors.buttonShadow,
+    tabBarItemStyle: {
+      backgroundColor: theme.colors.buttonFace,
+      width: buttonSize,
+      height: buttonSize,
+      marginHorizontal: theme.spacing.xs,
+      borderWidth: theme.border.width,
+      borderColor: theme.colors.buttonShadow,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tabBarLabelStyle: {
+      fontFamily: theme.font.family,
+      fontSize: theme.font.sizes.caption,
+      marginTop: theme.spacing.xs,
+    },
+    headerShown: false,
+  });
+
 
   return (
     <ThemeProvider>
@@ -182,53 +209,23 @@ export default function App() {
         {!session ? (
           <AuthScreen />
         ) : (
-          <Tab.Navigator
-            screenOptions={({ route }) => ({
-              tabBarIcon: ({ color }) => {
-                let iconName = 'ellipse';
-                if (route.name === 'Feed') iconName = 'play-outline';
-                if (route.name === 'Explore') iconName = 'search-outline';
-                if (route.name === 'Post') iconName = 'add-circle-outline';
-                if (route.name === 'Profile') iconName = 'person-outline';
-                return <Ionicons name={iconName} size={14} color={color} />;
-              },
-              tabBarActiveTintColor: theme.colors.text,
-              tabBarInactiveTintColor: theme.colors.buttonShadow,
-              tabBarStyle: defaultTabBarStyle,
-              tabBarItemStyle: {
-                backgroundColor: theme.colors.buttonFace,
-                width: buttonSize,
-                height: buttonSize,
-                marginHorizontal: theme.spacing.xs,
-                borderWidth: theme.border.width,
-                borderColor: theme.colors.buttonShadow,
-                alignItems: 'center',
-                justifyContent: 'center',
-              },
-              tabBarLabelStyle: {
-                fontFamily: theme.font.family,
-                fontSize: theme.font.sizes.caption,
-                marginTop: theme.spacing.xs,
-              },
-              headerShown: false,
-            })}
-          >
+          <Tab.Navigator screenOptions={commonOptions}>
             <Tab.Screen
               name="Feed"
               component={FeedStackScreen}
               options={({ route }) => {
-                const nested = getFocusedRouteNameFromRoute(route) ?? 'FeedMain';
+                // hide tab bar on any nested Feed screens
+                const isNested = route.state?.index > 0;
                 return {
-                  tabBarStyle: nested === 'FeedMain' ? defaultTabBarStyle : { display: 'none' },
+                  tabBarStyle: isNested
+                    ? { display: 'none' }
+                    : defaultTabBarStyle,
                 };
               }}
             />
-            <Tab.Screen name="World" component={ExploreScreen} />
-            <Tab.Screen name="Post" component={RecorderScreen} />
-            <Tab.Screen 
-              name="You"
-              component={ProfileStackScreen}
-            />
+            <Tab.Screen name="World" component={ExploreScreen} options={{ tabBarStyle: defaultTabBarStyle }} />
+            <Tab.Screen name="Post"  component={RecorderScreen} options={{ tabBarStyle: defaultTabBarStyle }} />
+            <Tab.Screen name="You"   component={ProfileStackScreen} options={{ tabBarStyle: defaultTabBarStyle }} />
           </Tab.Navigator>
         )}
       </NavigationContainer>
