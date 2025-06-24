@@ -10,7 +10,7 @@ import {
 import { Audio } from 'expo-av';
 import { supabase } from '../lib/supabase';
 import { useIsFocused } from '@react-navigation/native';
-import { useTheme } from '../ThemeContext';
+import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import * as FileSystem from 'expo-file-system';
 

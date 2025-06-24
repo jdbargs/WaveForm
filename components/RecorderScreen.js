@@ -14,7 +14,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
-import { useTheme } from '../ThemeContext';
+import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 
 

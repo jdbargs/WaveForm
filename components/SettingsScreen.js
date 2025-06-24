@@ -1,11 +1,11 @@
 // SettingsScreen.js
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useTheme } from './theme';
+import { useTheme } from '../theme';
 
 const AVAILABLE_COLORS = [
-  '#FFFFFF',' #F8F8F8',' #FFCDD2',' #F8BBD0',' #E1BEE7',
-  '#D1C4E9',' #C5CAE9',' #BBDEFB',' #B3E5FC',' #B2EBF2',' #B2DFDB'
+  '#FFFFFF', '#F8F8F8', '#FFCDD2', '#F8BBD0', '#E1BEE7',
+  '#D1C4E9', '#C5CAE9', '#BBDEFB', '#B3E5FC', '#B2EBF2', '#B2DFDB'
 ];
 
 export default function SettingsScreen() {

@@ -75,5 +75,44 @@ export const ThemeProvider = ({ children }) => {
   );
 };
 
+export const defaultTheme = {
+  colors: {
+    buttonFace: '#CCCCCC',
+    buttonShadow: '#808080',
+    buttonHighlight: '#FFFFFF',
+    accentBlue: '#0B16B4',
+    text: '#000000',
+    background: '#FFFFFF',  // your initial default
+  },
+  font: {
+    family: 'PressStart2P',
+    sizes: {
+      header: 18,
+      body: 16,
+      caption: 14,
+    },
+    weight: {
+      normal: '400',
+      bold: '700',
+    },
+  },
+  spacing: {
+    xs: 2,
+    sm: 4,
+    md: 8,
+    lg: 16,
+  },
+  border: {
+    width: 2,
+    radius: 0,
+  },
+  dimensions: {
+    headerHeight: 92,
+    buttonHeight: 32,
+    buttonPaddingHorizontal: 16,
+    buttonPaddingVertical: 6,
+  },
+};
+
 // Custom hook to access theme in components
 export const useTheme = () => useContext(ThemeContext);

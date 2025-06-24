@@ -1,7 +1,7 @@
 // components/Win95Button.js
 import React from 'react';
 import { Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useTheme } from '../ThemeContext';
+import { useTheme } from '../theme';
 
 export default function Win95Button({ title, onPress, children, style }) {
   const t = useTheme();

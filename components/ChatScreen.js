@@ -22,8 +22,7 @@ import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabase';
-import { theme } from '../theme';
-import { useTheme } from '../ThemeContext';
+import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import { v4 as uuidv4 } from 'uuid';
 import profileIcon from '../assets/images/profile.png';
@@ -53,9 +52,9 @@ export default function ChatScreen({ route, navigation }) {
     left: t.spacing.sm,
     right: t.spacing.sm,
     backgroundColor: t.colors.buttonFace,
-    borderTopWidth: theme.border.width,
+    borderTopWidth: t.border.width,
     borderTopColor: t.colors.buttonShadow,
-    height: theme.dimensions.buttonHeight * 3,
+    height: t.dimensions.buttonHeight * 3,
   };
 
   useFocusEffect(
@@ -351,9 +350,9 @@ export default function ChatScreen({ route, navigation }) {
       right: 0,
       width: 150,
 
-      backgroundColor: t.colors.buttonFace,    // ← theme light gray
+      backgroundColor: t.colors.buttonFace,  
       borderWidth: 1,
-      borderColor: t.colors.buttonShadow,      // ← theme darker gray
+      borderColor: t.colors.buttonShadow,   
       borderRadius: 6,
       maxHeight: 150,
       paddingVertical: 4,

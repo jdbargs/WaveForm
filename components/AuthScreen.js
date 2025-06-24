@@ -10,7 +10,7 @@ import {
   Image
 } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { useTheme } from '../ThemeContext';
+import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 
 export default function AuthScreen() {

@@ -10,7 +10,6 @@ import {
 } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { theme } from './theme';
 import FeedScreen from './components/FeedScreen';
 import ExploreScreen from './components/ExploreScreen';
 import MyPostsScreen from './components/MyPostsScreen';
@@ -20,9 +19,9 @@ import MessagesScreen from './components/MessagesScreen';
 import ChatScreen from './components/ChatScreen';
 import { supabase } from './lib/supabase';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { ThemeProvider } from './ThemeContext';
 import SettingsScreen   from './components/SettingsScreen';
 import Win95Button from './components/Win95Button';
+import { ThemeProvider, defaultTheme as theme, useTheme } from './theme';
 
 // Import mail icon for header
 import MailIcon from './assets/images/mail.png';
@@ -89,18 +88,20 @@ function ProfileStackScreen() {
 // Feed Stack
 const FeedStack = createNativeStackNavigator();
 function FeedStackScreen() {
+  const { colors, border, font } = useTheme();
+
   return (
     <FeedStack.Navigator
       screenOptions={{
         headerStyle: {
-          backgroundColor: theme.colors.buttonFace,
-          borderBottomWidth: theme.border.width,
-          borderBottomColor: theme.colors.buttonShadow,
+          backgroundColor: colors.buttonFace,
+          borderBottomWidth: border.width,
+          borderBottomColor: colors.buttonShadow,
         },
         headerTitleStyle: {
-          fontFamily: theme.font.family,
-          fontSize: theme.font.sizes.header,
-          color: theme.colors.text,
+          fontFamily: font.family,
+          fontSize: font.sizes.header,
+          color: colors.text,
         },
       }}
     >
@@ -118,7 +119,7 @@ function FeedStackScreen() {
                 borderWidth: 2,
                 borderColor: '#000',
                 borderRadius: 0,
-                backgroundColor: theme.colors.buttonFace
+                backgroundColor: theme.colors.buttonFace,
               }}
             >
               <Image source={MailIcon} style={{ width: 32, height: 32 }} />
@@ -126,11 +127,20 @@ function FeedStackScreen() {
           ),
         })}
       />
-      <FeedStack.Screen name="Messages" component={MessagesScreen} options={{ title: 'Messages' }} />
-      <FeedStack.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat' }} />
+      <FeedStack.Screen
+        name="Messages"
+        component={MessagesScreen}
+        options={{ title: 'Messages' }}
+      />
+      <FeedStack.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{ title: 'Chat' }}
+      />
     </FeedStack.Navigator>
   );
 }
+
 
 // Bottom Tabs
 const Tab = createBottomTabNavigator();

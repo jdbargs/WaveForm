@@ -11,7 +11,7 @@ import {
   Alert
 } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { useTheme } from '../ThemeContext';
+import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import { v4 as uuidv4 } from 'uuid';
 

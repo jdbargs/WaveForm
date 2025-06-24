@@ -19,7 +19,7 @@ import {
 import { Audio } from 'expo-av';
 import { supabase } from '../lib/supabase';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
-import { useTheme } from '../ThemeContext';
+import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import DesktopIcon from './DesktopIcon';
 
