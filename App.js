@@ -159,6 +159,7 @@ function InnerApp() {
   const [fontsLoaded] = useFonts({
     PressStart2P: require('./assets/fonts/PressStart2P.ttf'),
   });
+  const t = useTheme();
 
   // safe-area hook must be called before any early returns
   const insets = useSafeAreaInsets();
@@ -180,13 +181,18 @@ function InnerApp() {
   }
 
   const buttonSize = theme.dimensions.buttonHeight * 3;
+  // App.js (or wherever your Tab.Navigator lives)
   const defaultTabBarStyle = {
-    backgroundColor: theme.colors.buttonFace,
-    borderTopWidth: theme.border.width,
-    borderTopColor: theme.colors.buttonShadow,
-    height: buttonSize,
-    paddingBottom: insets.bottom,
+    position: 'absolute',
+    bottom: t.spacing.sm,
+    left:   t.spacing.sm,
+    right:  t.spacing.sm,
+    backgroundColor:  t.colors.buttonFace,
+    borderTopWidth:   t.border.width,
+    borderTopColor:   t.colors.buttonShadow,
+    height:           t.dimensions.buttonHeight * 3,
   };
+
 
   const commonOptions = ({ route }) => ({
     tabBarIcon: ({ color }) => {
@@ -274,10 +280,13 @@ function InnerApp() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <InnerApp />
+      <ThemeProvider>
+        <InnerApp />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
+
 
 const styles = StyleSheet.create({
   loaderContainer: {
