@@ -230,10 +230,11 @@ function InnerApp() {
               options={({ route }) => {
                 const isNested = route.state?.index > 0;
                 return {
+                  // When nested, collapse the bar to zero height
                   tabBarStyle: isNested
-                    ? { display: 'none' }
+                    ? { height: 0, overflow: 'hidden' }
                     : defaultTabBarStyle,
-                  unmountOnBlur: true,
+                  unmountOnBlur: true,  // still tear down the Feed stack when you leave
                 };
               }}
               listeners={({ navigation, route }) => ({

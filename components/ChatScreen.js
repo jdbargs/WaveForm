@@ -12,6 +12,7 @@ import {
   View,
   FlatList,
   StyleSheet,
+  ScrollView,
   Text,
   Image,
   TouchableOpacity,
@@ -366,14 +367,13 @@ export default function ChatScreen({ route, navigation }) {
       paddingVertical: 4,
     },
     userItem: {
-      backgroundColor: 't.colors.buttonFace',   // ← each item box is white
-      paddingVertical: 12,       // more tappable area
+      backgroundColor: t.colors.buttonFace,
+      paddingVertical: 12,
       paddingHorizontal: 16,
-      fontSize: 18,              // ← bigger text
+      fontSize: 18,
       fontFamily: t.font.family,
-      // optional separator:
       borderBottomWidth: 1,
-      borderBottomColor: 't.colors.buttonShadow',
+      borderBottomColor: t.colors.buttonShadow,
     },
   });
 
@@ -392,24 +392,23 @@ export default function ChatScreen({ route, navigation }) {
       />
 
       {showUsers && (
-        <View
-          style={[
-            styles.userDropdown,
-            {
-              backgroundColor: t.colors.buttonFace,
-              borderColor: t.colors.buttonShadow
-            }
-          ]}
-        >
-          {participants.map(u => (
-            <Text
-              key={u.id}
-              style={[styles.userItem, { color: t.colors.text }]}>
-              {u.username}
-            </Text>
-          ))}
+        <View style={[styles.userDropdown, {
+          backgroundColor: t.colors.buttonFace,
+          borderColor: t.colors.buttonShadow,
+        }]}>
+          <ScrollView style={{ maxHeight: 150 }}>
+            {participants.map(u => (
+              <Text
+                key={u.id}
+                style={[styles.userItem, { color: t.colors.text }]}
+              >
+                {u.username}
+              </Text>
+            ))}
+          </ScrollView>
         </View>
       )}
+
 
       <View
         style={[

@@ -14,15 +14,26 @@ import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import { v4 as uuidv4 } from 'uuid';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function MessagesScreen({ navigation }) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   const [currentUser, setCurrentUser] = useState(null);
   const [chats, setChats] = useState([]);
   const [newChatName, setNewChatName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]);
+
+  const defaultTabBarStyle = {
+    backgroundColor: t.colors.buttonFace,
+    borderTopWidth: t.border.width,
+    borderTopColor: t.colors.buttonShadow,
+    height: t.dimensions.buttonHeight * 3,
+    paddingBottom: insets.bottom,
+    paddingTop:    insets.top,
+  };
 
   // fetch current user
   useEffect(() => {
@@ -37,8 +48,9 @@ export default function MessagesScreen({ navigation }) {
     React.useCallback(() => {
       const parent = navigation.getParent();
       parent?.setOptions({ tabBarStyle: { display: 'none' } });
-      return () => parent?.setOptions({ tabBarStyle: undefined });
-    }, [navigation])
+      return () =>
+        parent?.setOptions({ tabBarStyle: defaultTabBarStyle });
+    }, [navigation, defaultTabBarStyle])
   );
 
   // header back button

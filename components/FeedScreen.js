@@ -13,13 +13,15 @@ import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import * as FileSystem from 'expo-file-system';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
-const SCREEN_HEIGHT = WINDOW_HEIGHT - 80;
+const SCREEN_HEIGHT = WINDOW_HEIGHT;
 
 export default function FeedScreen() {
   const t = useTheme();
   const isFocused = useIsFocused();
+  const TAB_BAR_HEIGHT = t.dimensions.buttonHeight * 3;
   const [posts, setPosts] = useState([]);
   const postsRef = useRef([]);  
   const [playingIndex, setPlayingIndex] = useState(null);
@@ -38,6 +40,9 @@ export default function FeedScreen() {
 
   // dynamic styles using theme
   const styles = StyleSheet.create({
+    safeArea: {
+      flex: 1,
+    },
     container: { flex: 1, backgroundColor: t.colors.background },
     page: {
       height: SCREEN_HEIGHT,
@@ -304,19 +309,27 @@ export default function FeedScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={posts}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        pagingEnabled
-        snapToInterval={SCREEN_HEIGHT}
-        snapToAlignment="center"
-        decelerationRate="fast"
-        showsVerticalScrollIndicator={false}
-        viewabilityConfig={viewConfig}
-        onViewableItemsChanged={onViewableItemsChanged}
-      />
-    </View>
+    <SafeAreaView
+      edges={['top']}                                     // only apply top inset
+      style={[styles.safeArea, { backgroundColor: t.colors.background }]}
+    >
+      <View style={[styles.container]}>
+        <FlatList
+          data={posts}
+          renderItem={renderItem}
+          keyExtractor={item => item.id}
+          pagingEnabled
+          snapToInterval={SCREEN_HEIGHT}
+          snapToAlignment="center"
+          decelerationRate="fast"
+          showsVerticalScrollIndicator={false}
+          viewabilityConfig={viewConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
+          contentContainerStyle={{
+            paddingBottom: TAB_BAR_HEIGHT + t.spacing.md, // let list scroll under bar
+          }}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
