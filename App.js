@@ -2,14 +2,23 @@
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, View, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import {
+  ActivityIndicator,
+  View,
+  StyleSheet,
+  Image,
+  TouchableOpacity
+} from 'react-native';
 import { useFonts } from 'expo-font';
 import {
   NavigationContainer,
-  getFocusedRouteNameFromRoute
+  getFocusedRouteNameFromRoute,
+  StackActions
 } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import FeedScreen from './components/FeedScreen';
 import ExploreScreen from './components/ExploreScreen';
 import MyPostsScreen from './components/MyPostsScreen';
@@ -17,15 +26,19 @@ import RecorderScreen from './components/RecorderScreen';
 import AuthScreen from './components/AuthScreen';
 import MessagesScreen from './components/MessagesScreen';
 import ChatScreen from './components/ChatScreen';
+import SettingsScreen from './components/SettingsScreen';
+import Win95Button from './components/Win95Button';
+
 import { supabase } from './lib/supabase';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import SettingsScreen   from './components/SettingsScreen';
-import Win95Button from './components/Win95Button';
 import { ThemeProvider, defaultTheme as theme, useTheme } from './theme';
 
 // Import mail icon for header
 import MailIcon from './assets/images/mail.png';
 
+//
+// Profile Stack
+//
 const ProfileStack = createNativeStackNavigator();
 function ProfileStackScreen() {
   return (
@@ -47,31 +60,24 @@ function ProfileStackScreen() {
         name="MyPosts"
         component={MyPostsScreen}
         options={({ navigation }) => ({
-          // 1) hide the built-in back arrow…
           headerBackVisible: false,
-          // 2) …and hide its "back title" ("My Posts")
           headerBackTitleVisible: false,
-          // 3) now supply your Win95Button instead
           headerLeft: () => (
             <Win95Button
               title="You"
               onPress={() => navigation.navigate('You')}
-              // if you need spacing, we'll forward a style prop below
               style={{ marginLeft: theme.spacing.sm }}
             />
           ),
         })}
       />
-
       <ProfileStack.Screen
         name="Settings"
         component={SettingsScreen}
         options={({ navigation }) => ({
           title: 'Settings',
-          // hide the default back indicator + label
           headerBackVisible: false,
           headerBackTitleVisible: false,
-          // inject our Win95 “You” button
           headerLeft: () => (
             <Win95Button
               title="<"
@@ -85,7 +91,9 @@ function ProfileStackScreen() {
   );
 }
 
+//
 // Feed Stack
+//
 const FeedStack = createNativeStackNavigator();
 function FeedStackScreen() {
   const { colors, border, font } = useTheme();
@@ -141,18 +149,25 @@ function FeedStackScreen() {
   );
 }
 
-
-// Bottom Tabs
+//
+// Bottom Tabs and InnerApp
+//
 const Tab = createBottomTabNavigator();
-export default function App() {
+
+function InnerApp() {
   const [session, setSession] = useState(null);
   const [fontsLoaded] = useFonts({
     PressStart2P: require('./assets/fonts/PressStart2P.ttf'),
   });
 
+  // safe-area hook must be called before any early returns
+  const insets = useSafeAreaInsets();
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_, newSession) => setSession(newSession));
+    const { data: listener } = supabase.auth.onAuthStateChange((_, newSession) =>
+      setSession(newSession)
+    );
     return () => listener.subscription?.unsubscribe();
   }, []);
 
@@ -170,9 +185,9 @@ export default function App() {
     borderTopWidth: theme.border.width,
     borderTopColor: theme.colors.buttonShadow,
     height: buttonSize,
+    paddingBottom: insets.bottom,
   };
 
-  // common tab options (icon, colors, item style, etc.)
   const commonOptions = ({ route }) => ({
     tabBarIcon: ({ color }) => {
       let iconName = 'ellipse';
@@ -202,7 +217,6 @@ export default function App() {
     headerShown: false,
   });
 
-
   return (
     <ThemeProvider>
       <NavigationContainer>
@@ -214,22 +228,53 @@ export default function App() {
               name="Feed"
               component={FeedStackScreen}
               options={({ route }) => {
-                // hide tab bar on any nested Feed screens
                 const isNested = route.state?.index > 0;
                 return {
                   tabBarStyle: isNested
                     ? { display: 'none' }
                     : defaultTabBarStyle,
+                  unmountOnBlur: true,
                 };
               }}
+              listeners={({ navigation, route }) => ({
+                tabPress: () => {
+                  const state = route.state;
+                  if (state?.index > 0) {
+                    navigation.dispatch({
+                      ...StackActions.popToTop(),
+                      target: route.key,
+                    });
+                  }
+                },
+              })}
             />
-            <Tab.Screen name="World" component={ExploreScreen} options={{ tabBarStyle: defaultTabBarStyle }} />
-            <Tab.Screen name="Post"  component={RecorderScreen} options={{ tabBarStyle: defaultTabBarStyle }} />
-            <Tab.Screen name="You"   component={ProfileStackScreen} options={{ tabBarStyle: defaultTabBarStyle }} />
+            <Tab.Screen
+              name="World"
+              component={ExploreScreen}
+              options={{ tabBarStyle: defaultTabBarStyle }}
+            />
+            <Tab.Screen
+              name="Post"
+              component={RecorderScreen}
+              options={{ tabBarStyle: defaultTabBarStyle }}
+            />
+            <Tab.Screen
+              name="You"
+              component={ProfileStackScreen}
+              options={{ tabBarStyle: defaultTabBarStyle }}
+            />
           </Tab.Navigator>
         )}
       </NavigationContainer>
     </ThemeProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <InnerApp />
+    </SafeAreaProvider>
   );
 }
 

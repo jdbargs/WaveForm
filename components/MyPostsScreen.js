@@ -22,11 +22,12 @@ import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import DesktopIcon from './DesktopIcon';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
 const ICON_SIZE = 80;
 const TRASH_MARGIN = 20;
-const TAB_BAR_HEIGHT = 80; // height of bottom tab bar
 const HEADER_HEIGHT     = 56;  // whatever your <View style={styles.header}> actually renders at
 const BREADCRUMB_HEIGHT = 48;  // whatever your <View style={styles.breadcrumb}> actually renders at
 const DROP_PADDING = 20;    // how many pixels extra you want around each icon
@@ -36,14 +37,16 @@ const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
 export default function MyPostsScreen() {
   const navigation = useNavigation();
   const t = useTheme();
-  // at the top of MyPostsScreen.js
   const [desktopHeight, setDesktopHeight] = useState(0);
   const [upRect, setUpRect] = useState(null);
   const [trashRect, setTrashRect] = useState(null);
-  // inside MyPostsScreen, after const [desktopHeight,...]
+  const [portalRect, setPortalRect] = useState(null);
   const containerWidth  = WINDOW_WIDTH;
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const containerHeight = desktopHeight ||
-    (WINDOW_HEIGHT - HEADER_HEIGHT - BREADCRUMB_HEIGHT - TAB_BAR_HEIGHT);
+    (WINDOW_HEIGHT - HEADER_HEIGHT - BREADCRUMB_HEIGHT - tabBarHeight);
+
 
 
   // Tab title
@@ -221,7 +224,7 @@ export default function MyPostsScreen() {
 
   useEffect(() => {
     if (desktopHeight === 0) return;  
-    const usableHeight = desktopHeight - TAB_BAR_HEIGHT;
+    const usableHeight = desktopHeight - tabBarHeight;
     const usableWidth  = WINDOW_WIDTH;
 
     // helper to clamp a single position
@@ -304,7 +307,7 @@ export default function MyPostsScreen() {
   // Move & reposition
   const updatePosition = async (id, rawPos, type) => {
     // 1) Clamp into desktop bounds
-    const usableHeight = desktopHeight - TAB_BAR_HEIGHT;
+    const usableHeight = desktopHeight - tabBarHeight;
     const usableWidth  = WINDOW_WIDTH;
 
     let x = clamp(rawPos.x, 0, usableWidth - ICON_SIZE);
@@ -391,68 +394,55 @@ export default function MyPostsScreen() {
   // 1️⃣ build this handler once per render:
   const handleDragEnd = useCallback(
     (id, rawPos, type) => {
-      // clamp & reposition as you already do
+      // First, clamp & reposition the item
       updatePosition(id, rawPos, type);
 
-      if (!trashRect) return;
-      // compute icon center
-      const cx = rawPos.x + ICON_SIZE / 2;
-      const cy = rawPos.y + ICON_SIZE / 2;
-
-      console.log(
-        `[DragEnd] ${type} ${id} dropped at center (${cx.toFixed(0)},${cy.toFixed(0)})`
-      );
-
-      // check trash zone first
+      // If the trash zone is defined and the drop is inside it, delete
       if (
-        cx >= trashRect.x &&
-        cx <= trashRect.x + trashRect.width &&
-        cy >= trashRect.y &&
-        cy <= trashRect.y + trashRect.height
+        trashRect &&
+        rawPos.x + ICON_SIZE/2 >= trashRect.x &&
+        rawPos.x + ICON_SIZE/2 <= trashRect.x + trashRect.width &&
+        rawPos.y + ICON_SIZE/2 >= trashRect.y &&
+        rawPos.y + ICON_SIZE/2 <= trashRect.y + trashRect.height
       ) {
-        console.log('[DragEnd] → in TRASH zone!');
-        // optionally confirm to avoid accidents:
         Alert.alert(
           'Delete?',
           `Permanently delete this ${type}?`,
           [
             { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'OK',
-              onPress: () => handleTrashDrop(id, type)
-            }
+            { text: 'OK', onPress: () => handleTrashDrop(id, type) }
           ]
         );
         return;
       }
 
-      // then portal zone
+      // If the portal zone is defined and the drop is inside it, move back up
       if (
-        cx >= portalRect.x &&
-        cx <= portalRect.x + portalRect.width &&
-        cy >= portalRect.y &&
-        cy <= portalRect.y + portalRect.height
+        portalRect &&
+        rawPos.x + ICON_SIZE/2 >= portalRect.x &&
+        rawPos.x + ICON_SIZE/2 <= portalRect.x + portalRect.width &&
+        rawPos.y + ICON_SIZE/2 >= portalRect.y &&
+        rawPos.y + ICON_SIZE/2 <= portalRect.y + portalRect.height
       ) {
-        console.log('[DragEnd] → in PORTAL zone!');
-        handleDropOnBack(id); // or whatever portal logic you want
+        // Move item back to its parent folder
+        moveIntoFolder(id, parentFolder, type);
         return;
       }
 
-      // then folders
+      // Otherwise, check folder drop zones
       for (const { id: fid, x, y, width, height } of folderRects) {
         if (
-          cx >= x &&
-          cx <= x + width &&
-          cy >= y &&
-          cy <= y + height
+          rawPos.x + ICON_SIZE/2 >= x &&
+          rawPos.x + ICON_SIZE/2 <= x + width &&
+          rawPos.y + ICON_SIZE/2 >= y &&
+          rawPos.y + ICON_SIZE/2 <= y + height
         ) {
-          console.log(`[DragEnd] → into folder ${fid}`);
           moveIntoFolder(id, fid, type);
           return;
         }
       }
     },
-    [trashRect, portalRect, folderRects, updatePosition, moveIntoFolder]
+    [trashRect, portalRect, folderRects, updatePosition, moveIntoFolder, parentFolder]
   );
 
 
@@ -463,12 +453,6 @@ export default function MyPostsScreen() {
 
   // Drop zones
   const folderRects = visibleFolders.map((f) => ({ id: f.id, x: f.position.x, y: f.position.y, width: ICON_SIZE, height: ICON_SIZE }));
-  const portalRect = {
-    x: TRASH_MARGIN - DROP_PADDING,
-    y: (desktopHeight - ICON_SIZE - TRASH_MARGIN),
-    width: ICON_SIZE + DROP_PADDING,
-    height: ICON_SIZE + DROP_PADDING,
-  };
 
   const styles = StyleSheet.create({ 
     safeArea: { flex: 1, backgroundColor: t.colors.background }, 
@@ -476,7 +460,13 @@ export default function MyPostsScreen() {
     usernameInput: { flex: 1, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.header, fontWeight: t.font.weight.bold, borderBottomWidth: t.border.width, borderBottomColor: t.colors.buttonShadow, marginRight: t.spacing.sm }, 
     postCount: { color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body }, 
     breadcrumb: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: t.spacing.sm, backgroundColor: t.colors.background }, 
-    breadcrumbText: { marginLeft: t.spacing.sm, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body }, desktopContainer: { flex: 1, backgroundColor: t.colors.background, position: 'relative' } 
+    breadcrumbText: { marginLeft: t.spacing.sm, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body }, desktopContainer: { flex: 1, backgroundColor: t.colors.background, position: 'relative' },
+    desktopContainer: {
+    flex: 1,
+    backgroundColor: t.colors.background,
+    position: 'relative',
+    paddingBottom: tabBarHeight,   // ← reserve exactly that much space at the bottom
+    }
   });
 
   return (
@@ -553,6 +543,7 @@ export default function MyPostsScreen() {
             }}
           />
         )}
+        {portalRect && (
         <View
           pointerEvents="none"
           style={{
@@ -564,6 +555,7 @@ export default function MyPostsScreen() {
             backgroundColor: 'rgba(0, 0, 255, 0.3)'
           }}
         />
+      )}
         {visibleItems.map((item) => {
           const absoluteIndex =
             item.type === 'file'
@@ -602,20 +594,21 @@ export default function MyPostsScreen() {
             position: 'absolute',
             width: ICON_SIZE,
             height: ICON_SIZE,
-            bottom: TRASH_MARGIN + TAB_BAR_HEIGHT - 20,
-            right: TRASH_MARGIN - 10,
+            bottom: TRASH_MARGIN,
+            right: TRASH_MARGIN,
           }}
           resizeMode="contain"
         />
         {/* Portal Icon */}
         <Image
           source={require('../assets/images/portal.png')}
+          onLayout={e => setPortalRect(e.nativeEvent.layout)}
           style={{
             position: 'absolute',
             width: ICON_SIZE,
             height: ICON_SIZE,
-            bottom: TRASH_MARGIN + TAB_BAR_HEIGHT - 20,
-            left: TRASH_MARGIN - 10,
+            bottom: TRASH_MARGIN,
+            left: TRASH_MARGIN,
           }}
           resizeMode="contain"
         />

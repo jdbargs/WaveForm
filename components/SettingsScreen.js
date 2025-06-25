@@ -4,15 +4,23 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../theme';
 
 const AVAILABLE_COLORS = [
-  '#FFFFFF', '#F8F8F8', '#FFCDD2', '#F8BBD0', '#E1BEE7',
-  '#D1C4E9', '#C5CAE9', '#BBDEFB', '#B3E5FC', '#B2EBF2', '#B2DFDB'
+  '#0B16B4', '#FFDB58', ' #FF6961', '#4B5320', '#800000',
+  '#4B0082', '#FFFFFF'
 ];
 
 export default function SettingsScreen() {
   const theme = useTheme();
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Text style={[styles.label, { color: theme.colors.text }]}>
+      <Text
+        style={[
+          styles.label,
+          {
+            color: theme.colors.text,
+            fontFamily: theme.font.family,    // ← here’s the font
+          },
+        ]}
+      >
         Choose background color:
       </Text>
       <View style={styles.swatchRow}>
