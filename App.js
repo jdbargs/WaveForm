@@ -81,7 +81,7 @@ function ProfileStackScreen() {
           headerLeft: () => (
             <Win95Button
               title="<"
-              onPress={() => navigation.navigate('MyPosts')}
+              onPress={() => navigation.goBack()}
               style={{ marginLeft: theme.spacing.sm }}
             />
           ),

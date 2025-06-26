@@ -26,10 +26,12 @@ import Win95Button from './Win95Button';
 import { v4 as uuidv4 } from 'uuid';
 import profileIcon from '../assets/images/profile.png';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ChatScreen({ route, navigation }) {
   const t = useTheme();
   const { chatId } = route.params;
+  const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState([]);
   const [recording, setRecording] = useState(null);
@@ -52,7 +54,7 @@ export default function ChatScreen({ route, navigation }) {
     left: t.spacing.sm,
     right: t.spacing.sm,
     backgroundColor: t.colors.buttonFace,
-    borderTopWidth: t.border.width,
+    borderTopWidth: 0,
     borderTopColor: t.colors.buttonShadow,
     height: t.dimensions.buttonHeight * 3,
   };
@@ -370,7 +372,7 @@ export default function ChatScreen({ route, navigation }) {
 
   return (
     <SafeAreaView
-      edges={['top']}   // ← add this so it won’t pad at the bottom
+      edges={['left', 'right', 'bottom']} // <-- ignore top inset!
       style={[styles.safeArea, { backgroundColor: t.colors.background }]}
     >
       <FlatList
@@ -406,8 +408,17 @@ export default function ChatScreen({ route, navigation }) {
         style={[
           styles.controls,
           {
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: insets.bottom + t.spacing.xl, // <-- This will keep it above the bottom safe area
             padding: t.spacing.md,
-            borderTopColor: t.colors.buttonShadow
+            borderTopColor: t.colors.buttonShadow,
+            backgroundColor: t.colors.background,
+            borderTopWidth: 0,
+            zIndex: 100,
+            borderWidth: 2, // debug
+            borderColor: 'red',
           }
         ]}
       >
