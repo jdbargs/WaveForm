@@ -8,7 +8,6 @@ import React, {
 } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  SafeAreaView,
   View,
   FlatList,
   StyleSheet,
@@ -27,6 +26,7 @@ import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import { v4 as uuidv4 } from 'uuid';
 import profileIcon from '../assets/images/profile.png';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ChatScreen({ route, navigation }) {
   const t = useTheme();
@@ -57,14 +57,6 @@ export default function ChatScreen({ route, navigation }) {
     borderTopColor: t.colors.buttonShadow,
     height: t.dimensions.buttonHeight * 3,
   };
-
-  useFocusEffect(
-    useCallback(() => {
-      const tabNav = navigation.getParent();
-      tabNav?.setOptions({ tabBarStyle: { display: 'none' } });
-      return () => tabNav?.setOptions({ tabBarStyle: defaultTabBarStyle });
-    }, [navigation, defaultTabBarStyle])
-  );
 
   // load participant list
   useEffect(() => {
