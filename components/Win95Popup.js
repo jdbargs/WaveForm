@@ -30,7 +30,7 @@ export default function Win95Popup({
             borderRightColor: t.colors.buttonShadow
           }
         ]}>
-
+          {/* Header FIRST */}
           <View style={[
             styles.header,
             {
@@ -54,14 +54,25 @@ export default function Win95Popup({
             </TouchableOpacity>
           </View>
 
+          {/* Content */}
           <View style={[
             styles.content,
-            { backgroundColor: t.colors.windowBackground }
+            { backgroundColor: '#C0C0C0' }
           ]}>
-            {children}
+            <Text style={{
+              color: t.colors.text,
+              fontFamily: t.font.family,
+              fontSize: t.font.sizes.body
+            }}>
+              {children}
+            </Text>
           </View>
-
-          <View style={styles.footer}>
+          
+          {/* Footer */}
+          <View style={[
+            styles.footer,
+            { backgroundColor: t.colors?.windowBackground || '#C0C0C0' }
+          ]}>
             {buttons.map((btn, i) => (
               <Win95Button
                 key={i}
@@ -86,7 +97,8 @@ const styles = StyleSheet.create({
   },
   window: {
     width: 300,
-    borderWidth: 2
+    borderWidth: 2,
+    backgroundColor: '#C0C0C0',
   },
   header: {
     flexDirection: 'row',
@@ -114,7 +126,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    padding: 4
+    padding: 4,
+    backgroundColor: '#C0C0C0'
   },
   actionButton: {
     marginLeft: 8
