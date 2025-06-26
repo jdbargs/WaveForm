@@ -43,16 +43,6 @@ export default function MessagesScreen({ navigation }) {
     })();
   }, []);
 
-  // hide tab bar on focus
-  useFocusEffect(
-    React.useCallback(() => {
-      const parent = navigation.getParent();
-      parent?.setOptions({ tabBarStyle: { display: 'none' } });
-      return () =>
-        parent?.setOptions({ tabBarStyle: defaultTabBarStyle });
-    }, [navigation, defaultTabBarStyle])
-  );
-
   // header back button
   useLayoutEffect(() => {
     navigation.setOptions({

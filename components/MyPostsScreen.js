@@ -584,7 +584,7 @@ export default function MyPostsScreen() {
             />
           );
         })}
-        {/* Trash Icon */}
+        {/* Trash and Portal Icon */}
         <Image
           source={require('../assets/images/trash.png')}
           onLayout={e => {
@@ -594,12 +594,11 @@ export default function MyPostsScreen() {
             position: 'absolute',
             width: ICON_SIZE,
             height: ICON_SIZE,
-            bottom: TRASH_MARGIN,
+            bottom: tabBarHeight,
             right: TRASH_MARGIN,
           }}
           resizeMode="contain"
         />
-        {/* Portal Icon */}
         <Image
           source={require('../assets/images/portal.png')}
           onLayout={e => setPortalRect(e.nativeEvent.layout)}
@@ -607,12 +606,12 @@ export default function MyPostsScreen() {
             position: 'absolute',
             width: ICON_SIZE,
             height: ICON_SIZE,
-            bottom: TRASH_MARGIN,
+            bottom: tabBarHeight,
             left: TRASH_MARGIN,
           }}
           resizeMode="contain"
         />
-      </View>
+        </View>
     </SafeAreaView>
   );
 }

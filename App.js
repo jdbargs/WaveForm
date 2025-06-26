@@ -234,23 +234,19 @@ function InnerApp() {
               name="Feed"
               component={FeedStackScreen}
               options={({ route }) => {
-                const isNested = route.state?.index > 0;
+                const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'FeedMain';
+                const isNested = focusedRoute !== 'FeedMain';
                 return {
-                  // When nested, collapse the bar to zero height
                   tabBarStyle: isNested
-                    ? { height: 0, overflow: 'hidden' }
+                    ? { display: 'none' } // <-- fully hides the tab bar
                     : defaultTabBarStyle,
-                  unmountOnBlur: true,  // still tear down the Feed stack when you leave
                 };
               }}
               listeners={({ navigation, route }) => ({
                 tabPress: () => {
-                  const state = route.state;
-                  if (state?.index > 0) {
-                    navigation.dispatch({
-                      ...StackActions.popToTop(),
-                      target: route.key,
-                    });
+                  const focusedRoute = getFocusedRouteNameFromRoute(route) ?? 'FeedMain';
+                  if (focusedRoute !== 'FeedMain') {
+                    navigation.navigate('Feed', { screen: 'FeedMain' });
                   }
                 },
               })}

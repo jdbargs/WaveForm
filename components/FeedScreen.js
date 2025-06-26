@@ -1,5 +1,5 @@
 // components/FeedScreen.js
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useLayoutEffect } from 'react';
 import {
   View,
   FlatList,
@@ -13,7 +13,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import * as FileSystem from 'expo-file-system';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
 const SCREEN_HEIGHT = WINDOW_HEIGHT;
@@ -27,6 +27,11 @@ export default function FeedScreen() {
   const [playingIndex, setPlayingIndex] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const insets = useSafeAreaInsets();
+
+  // debugging insets
+  console.log("🔍 [Feed] insets:", insets);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setCurrentUserId(user.id);
@@ -88,29 +93,30 @@ export default function FeedScreen() {
   const viewConfig = { viewAreaCoveragePercentThreshold: 80 };
   // viewability for autoplay
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }) => {
-      if (!viewableItems || viewableItems.length === 0) return;
+    async ({ viewableItems }) => {
+      // nothing visible → bail
+      if (!viewableItems?.length) return;
 
       const idx = viewableItems[0].index;
+      // same clip as before → no change
       if (idx === playingIndex) return;
 
       const post = postsRef.current[idx];
-        if (post && post.id !== currentUserId) {
-          console.log('[FeedScreen] bumping view_count for', post.id);
-            supabase
-              .rpc('increment_post_view_count', { p_post_id: post.id })
-              .then(({ data, error }) => {
-                if (error) {
-                  console.warn('[FeedScreen] RPC error:', error);
-                } else {
-                  console.log('[FeedScreen] RPC OK, returned:', data);
-                }
-              });
+      if (post && post.id !== currentUserId) {
+        try {
+          // bump view count in the database
+          await supabase.rpc('increment_post_view_count', { p_post_id: post.id });
+        } catch (err) {
+          console.warn('Failed to bump view_count:', err);
         }
+      }
+
+      // play or pause the newly visible clip
       togglePlayPause(idx);
     },
     [currentUserId, playingIndex]
   );
+
 
 
   // silent mode
@@ -223,13 +229,9 @@ export default function FeedScreen() {
 
       const info = await FileSystem.getInfoAsync(localUri, { size: true });
       if (!info.exists) {
-        console.log("Downloading to:", localUri);
         await FileSystem.downloadAsync(remoteUrl, localUri);
         const newInfo = await FileSystem.getInfoAsync(localUri, { size: true });
-        console.log("Downloaded size:", newInfo.size, "bytes");
-      } else {
-        console.log("Using cached file, size:", info.size, "bytes");
-      }
+      } 
     } catch (err) {
       console.error("Download error:", err);
       alert("Could not download audio for playback.");
@@ -242,7 +244,6 @@ export default function FeedScreen() {
         { uri: localUri },
         { shouldPlay: true }
       );
-      console.log("Playback loaded:", status);
       soundRef.current = newSound;
       setPlayingIndex(index);
       setIsPlaying(true);
@@ -308,28 +309,28 @@ export default function FeedScreen() {
     );
   };
 
+
   return (
     <SafeAreaView
-      edges={['top']}                                     // only apply top inset
-      style={[styles.safeArea, { backgroundColor: t.colors.background }]}
+      edges={[]}       
+      style={{
+        flex: 1,
+        backgroundColor: t.colors.background,
+      }}
     >
-      <View style={[styles.container]}>
-        <FlatList
-          data={posts}
-          renderItem={renderItem}
-          keyExtractor={item => item.id}
-          pagingEnabled
-          snapToInterval={SCREEN_HEIGHT}
-          snapToAlignment="center"
-          decelerationRate="fast"
-          showsVerticalScrollIndicator={false}
-          viewabilityConfig={viewConfig}
-          onViewableItemsChanged={onViewableItemsChanged}
-          contentContainerStyle={{
-            paddingBottom: TAB_BAR_HEIGHT + t.spacing.md, // let list scroll under bar
-          }}
-        />
-      </View>
+      <FlatList
+        data={posts}
+        renderItem={renderItem}
+        keyExtractor={item => item.id}
+        pagingEnabled
+        snapToInterval={SCREEN_HEIGHT}
+        snapToAlignment="center"
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        viewabilityConfig={viewConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
+        ListFooterComponent={<View style={{ height: TAB_BAR_HEIGHT }} />}
+      />
     </SafeAreaView>
   );
 }

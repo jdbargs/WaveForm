@@ -6,7 +6,6 @@ import React, {
   useRef,
   useCallback
 } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   FlatList,
@@ -371,6 +370,7 @@ export default function ChatScreen({ route, navigation }) {
 
   return (
     <SafeAreaView
+      edges={['top']}   // ← add this so it won’t pad at the bottom
       style={[styles.safeArea, { backgroundColor: t.colors.background }]}
     >
       <FlatList
