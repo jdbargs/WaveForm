@@ -18,12 +18,13 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { supabase } from '../lib/supabase';
-import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import DesktopIcon from './DesktopIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import Win95Popup from './Win95Popup';
 
 const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
 const ICON_SIZE = 80;
@@ -41,14 +42,18 @@ export default function MyPostsScreen() {
   const [upRect, setUpRect] = useState(null);
   const [trashRect, setTrashRect] = useState(null);
   const [portalRect, setPortalRect] = useState(null);
+  const [showPopup, setShowPopup] = useState(false);
   const containerWidth  = WINDOW_WIDTH;
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const containerHeight = desktopHeight ||
     (WINDOW_HEIGHT - HEADER_HEIGHT - BREADCRUMB_HEIGHT - tabBarHeight);
 
-
-
+  useFocusEffect(
+    useCallback(() => {
+      setShowPopup(true);
+    }, [])
+  );
   // Tab title
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -523,6 +528,14 @@ export default function MyPostsScreen() {
           />
       </Win95Button>
       </View>
+
+      <Win95Popup
+        visible={showPopup}
+        title="Test Popup"
+        onClose={() => setShowPopup(false)}
+      >
+        <Text>This is a test of Win95Popup!</Text>
+      </Win95Popup>
 
       {/* Desktop icons + debug overlays */}
       <View

@@ -29,9 +29,6 @@ export default function FeedScreen() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const insets = useSafeAreaInsets();
 
-  // debugging insets
-  console.log("🔍 [Feed] insets:", insets);
-
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setCurrentUserId(user.id);
