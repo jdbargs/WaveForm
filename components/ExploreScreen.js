@@ -158,10 +158,14 @@ export default function ExploreScreen() {
         audio_url,
         view_count,
         created_at,
-        author:users!posts_user_id_fkey(username)
+        author:users!posts_user_id_fkey(
+          username,
+          is_private
+        )
       `)
       .order('view_count', { ascending: false })
       .eq('is_public', true)
+      .eq('author.is_private', false)
       .limit(100);
 
     if (error) console.error(error);

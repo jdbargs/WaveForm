@@ -46,6 +46,7 @@ export default function MyPostsScreen() {
   const containerWidth  = WINDOW_WIDTH;
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  const [request, setRequest] = useState(null);
   const containerHeight = desktopHeight ||
     (WINDOW_HEIGHT - HEADER_HEIGHT - BREADCRUMB_HEIGHT - tabBarHeight);
 
@@ -529,6 +530,7 @@ export default function MyPostsScreen() {
       </Win95Button>
       </View>
 
+      {/* Popup for testing */}
       <Win95Popup
         visible={showPopup}
         title="Test Popup"
@@ -536,6 +538,19 @@ export default function MyPostsScreen() {
       >
         <Text>This is a test of Win95Popup!</Text>
       </Win95Popup>
+
+      {/* Follow request popup */}
+      {request && (
+        <Win95Popup
+          visible={true}
+          title="New Follow Request"
+          onClose={() => setPopupVisible(false)}
+        >
+          <Text>{request.follower_id} wants to follow you.</Text>
+          <Button onPress={() => respondFollowRequest(request.id, true)}>Accept</Button>
+          <Button onPress={() => respondFollowRequest(request.id, false)}>Reject</Button>
+        </Win95Popup>
+      )}
 
       {/* Desktop icons + debug overlays */}
       <View
