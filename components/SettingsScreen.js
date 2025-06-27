@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../theme';
 import { supabase } from '../lib/supabase';
+import ThemedSwitch from './ThemedSwitch';
 
 const AVAILABLE_COLORS = [
   '#0B16B4', '#FFDB58', '#FF6961', '#4B5320', '#800000',
@@ -21,6 +22,7 @@ export default function SettingsScreen() {
   // Local state for the privacy flag + loading
   const [isPrivate, setIsPrivate] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [dummy, setDummy] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -78,7 +80,7 @@ export default function SettingsScreen() {
 
       {/* Private-account toggle */}
       <Text style={[styles.label, { color: colors.text, fontFamily: font.family, marginTop: 24 }]}>Private account</Text>
-      <Switch
+      <ThemedSwitch
         style={styles.switch}
         trackColor={{ false: colors.border, true: colors.primary }}
         thumbColor={isPrivate ? colors.primary : colors.border}
@@ -104,6 +106,16 @@ export default function SettingsScreen() {
           }
         }}
       />
+      {/* DUMMY SWITCH PREVIEW */}
+      <Text style={[styles.label, { color: colors.text, fontFamily: font.family, marginTop: 32 }]}>
+        Dummy Switch Preview:
+      </Text>
+      <ThemedSwitch
+        value={dummy}
+        onValueChange={setDummy}
+        trackColor={{ true: '#FF0000', false: '#00FF00' }}
+        style={{ alignSelf: 'flex-start', marginTop: 8 }}
+      />
     </View>
   );
 }
@@ -128,7 +140,7 @@ const styles = StyleSheet.create({
     margin: 4,
     borderWidth: 2,
     borderColor: 'transparent',
-    borderRadius: 4,
+    borderRadius: 0,
   },
   selected: {
     borderColor: colors => colors.text, // dynamic border
