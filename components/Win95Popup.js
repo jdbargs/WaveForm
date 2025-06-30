@@ -13,9 +13,7 @@ export default function Win95Popup({
   const t = useTheme();
 
   // Default to a single OK button if no actions provided
-  const buttons = actions.length > 0
-    ? actions
-    : [{ label: 'OK', onPress: onClose }];
+  const buttons = actions;
 
   return (
     <Modal transparent animationType="none" visible={visible}>
@@ -45,10 +43,7 @@ export default function Win95Popup({
               {title}
             </Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={[
-                styles.closeText,
-                { color: t.colors.text, fontFamily: t.font.family }
-              ]}>
+              <Text style={{ fontFamily: t.font.family, fontSize: t.font.sizes.body, color: t.colors.text }}>
                 X
               </Text>
             </TouchableOpacity>
@@ -59,29 +54,35 @@ export default function Win95Popup({
             styles.content,
             { backgroundColor: '#C0C0C0' }
           ]}>
-            <Text style={{
-              color: t.colors.text,
-              fontFamily: t.font.family,
-              fontSize: t.font.sizes.body
-            }}>
-              {children}
-            </Text>
+            {typeof children === 'string' ? (
+              <Text style={{
+                color: t.colors.text,
+                fontFamily: t.font.family,
+                fontSize: t.font.sizes.body
+              }}>
+                {children}
+              </Text>
+            ) : (
+              children
+            )}
           </View>
           
           {/* Footer */}
-          <View style={[
-            styles.footer,
-            { backgroundColor: t.colors?.windowBackground || '#C0C0C0' }
-          ]}>
-            {buttons.map((btn, i) => (
-              <Win95Button
-                key={i}
-                title={btn.label}
-                onPress={btn.onPress}
-                style={styles.actionButton}
-              />
-            ))}
-          </View>
+          {buttons.length > 0 && (
+            <View style={[
+              styles.footer,
+              { backgroundColor: t.colors?.windowBackground || '#C0C0C0' }
+            ]}>
+              {buttons.map((btn, i) => (
+                <Win95Button
+                  key={i}
+                  title={btn.label}
+                  onPress={btn.onPress}
+                  style={styles.actionButton}
+                />
+              ))}
+            </View>
+          )}
         </View>
       </View>
     </Modal>

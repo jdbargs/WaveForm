@@ -12,8 +12,8 @@ import { supabase } from '../lib/supabase';
 import ThemedSwitch from './ThemedSwitch';
 
 const AVAILABLE_COLORS = [
-  '#0B16B4', '#FFDB58', '#FF6961', '#4B5320', '#800000',
-  '#4B0082', '#FFFFFF'
+  '#0B16B4', '#FFDB58', '#008000', '#FF8C00', '#FF0000',
+  '#B0B0B0', '#FFFFFF'
 ];
 
 export default function SettingsScreen() {

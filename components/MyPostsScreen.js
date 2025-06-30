@@ -49,6 +49,13 @@ export default function MyPostsScreen() {
   const [request, setRequest] = useState(null);
   const containerHeight = desktopHeight ||
     (WINDOW_HEIGHT - HEADER_HEIGHT - BREADCRUMB_HEIGHT - tabBarHeight);
+  const [renamePopup, setRenamePopup] = useState({
+    visible: false,
+    id: null,
+    type: null,
+    value: '',
+  });
+  
 
   useFocusEffect(
     useCallback(() => {
@@ -277,37 +284,32 @@ export default function MyPostsScreen() {
 
   // Rename
   const handleRenameDrop = (id, type) => {
+    let currentName = '';
     if (type === 'file') {
       const file = posts.find((p) => p.id === id);
-      Alert.prompt(
-        'Rename Post',
-        'Enter new name:',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'OK', onPress: async (text) => {
-              await supabase.from('posts').update({ caption: text }).eq('id', id);
-              setPosts((p) => p.map((x) => x.id === id ? { ...x, caption: text } : x));
-            }}
-        ],
-        'plain-text',
-        file.caption
-      );
+      currentName = file?.caption || '';
     } else {
       const folder = folders.find((f) => f.id === id);
-      Alert.prompt(
-        'Rename Folder',
-        'Enter new name:',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'OK', onPress: async (text) => {
-              await supabase.from('folders').update({ name: text }).eq('id', id);
-              setFolders((f) => f.map((x) => x.id === id ? { ...x, name: text } : x));
-            }}
-        ],
-        'plain-text',
-        folder.name
-      );
+      currentName = folder?.name || '';
     }
+    setRenamePopup({
+      visible: true,
+      id,
+      type,
+      value: currentName,
+    });
+  };
+
+  const handleRenameSubmit = async () => {
+    const { id, type, value } = renamePopup;
+    if (type === 'file') {
+      await supabase.from('posts').update({ caption: value }).eq('id', id);
+      setPosts((p) => p.map((x) => x.id === id ? { ...x, caption: value } : x));
+    } else {
+      await supabase.from('folders').update({ name: value }).eq('id', id);
+      setFolders((f) => f.map((x) => x.id === id ? { ...x, name: value } : x));
+    }
+    setRenamePopup({ visible: false, id: null, type: null, value: '' });
   };
 
   // Move & reposition
@@ -315,6 +317,7 @@ export default function MyPostsScreen() {
     // 1) Clamp into desktop bounds
     const usableHeight = desktopHeight - tabBarHeight;
     const usableWidth  = WINDOW_WIDTH;
+    console.log('rawPos:', rawPos, 'trashRect:', trashRect);
 
     let x = clamp(rawPos.x, 0, usableWidth - ICON_SIZE);
     let y = clamp(rawPos.y, 0, usableHeight - ICON_SIZE);
@@ -406,6 +409,8 @@ export default function MyPostsScreen() {
       // If the trash zone is defined and the drop is inside it, delete
       if (
         trashRect &&
+        trashRect.width > 0 &&
+        trashRect.height > 0 &&
         rawPos.x + ICON_SIZE/2 >= trashRect.x &&
         rawPos.x + ICON_SIZE/2 <= trashRect.x + trashRect.width &&
         rawPos.y + ICON_SIZE/2 >= trashRect.y &&
@@ -431,7 +436,7 @@ export default function MyPostsScreen() {
         rawPos.y + ICON_SIZE/2 <= portalRect.y + portalRect.height
       ) {
         // Move item back to its parent folder
-        moveIntoFolder(id, parentFolder, type);
+        handleRenameDrop(id, type);
         return;
       }
 
@@ -551,6 +556,26 @@ export default function MyPostsScreen() {
           <Button onPress={() => respondFollowRequest(request.id, false)}>Reject</Button>
         </Win95Popup>
       )}
+
+      {/* Rename popup */}
+      <Win95Popup
+        visible={renamePopup.visible}
+        title={`Rename ${renamePopup.type === 'file' ? 'Post' : 'Folder'}`}
+        onClose={() => setRenamePopup({ visible: false, id: null, type: null, value: '' })}
+        actions={[]}
+      >
+        <Text>Enter new name:</Text>
+        <TextInput
+          value={renamePopup.value}
+          onChangeText={text => setRenamePopup(r => ({ ...r, value: text }))}
+          style={{ borderWidth: 1, borderColor: t.colors.buttonShadow, marginVertical: 12, color: t.colors.text, fontFamily: t.font.family, fontSize: t.font.sizes.body, padding: 6 }}
+          autoFocus
+        />
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <Win95Button title="Cancel" onPress={() => setRenamePopup({ visible: false, id: null, type: null, value: '' })} />
+          <Win95Button title="OK" onPress={handleRenameSubmit} style={{ marginLeft: 8 }} />
+        </View>
+      </Win95Popup>
 
       {/* Desktop icons + debug overlays */}
       <View

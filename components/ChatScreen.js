@@ -303,7 +303,11 @@ export default function ChatScreen({ route, navigation }) {
 
 
   const styles = StyleSheet.create({
-    safeArea: { flex: 1 },
+    safeArea: {
+      flex: 1,
+      position: 'relative', // ensures absolute children are relative to this
+      backgroundColor: t.colors.background,
+    },
     list: {},
     messageRow: {
       flexDirection: 'row',
@@ -313,7 +317,7 @@ export default function ChatScreen({ route, navigation }) {
     controls: {
       flexDirection: 'row',
       justifyContent: 'center',
-      borderTopWidth: 1
+      borderTopWidth: 0
     },
     usernameText: {
       fontFamily: t.font.family,
@@ -373,16 +377,13 @@ export default function ChatScreen({ route, navigation }) {
   return (
     <SafeAreaView
       edges={['left', 'right', 'bottom']} // <-- ignore top inset!
-      style={[styles.safeArea, { backgroundColor: t.colors.background }]}
+      style={styles.safeArea}
     >
       <FlatList
         data={messages}
         keyExtractor={item => item.id}
         renderItem={renderItem}
-        contentContainerStyle={[
-          styles.list,
-          { padding: t.spacing.md }
-        ]}
+        style={{ flex: 1 }}
       />
 
       {showUsers && (
@@ -411,14 +412,10 @@ export default function ChatScreen({ route, navigation }) {
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: insets.bottom + t.spacing.xl, // <-- This will keep it above the bottom safe area
-            padding: t.spacing.md,
-            borderTopColor: t.colors.buttonShadow,
+            bottom: insets.bottom, // <-- This will keep it above the bottom safe area
             backgroundColor: t.colors.background,
-            borderTopWidth: 0,
+            padding: 20,
             zIndex: 100,
-            borderWidth: 2, // debug
-            borderColor: 'red',
           }
         ]}
       >
