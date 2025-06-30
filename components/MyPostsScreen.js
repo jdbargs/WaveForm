@@ -47,8 +47,14 @@ export default function MyPostsScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const [request, setRequest] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const containerHeight = desktopHeight ||
     (WINDOW_HEIGHT - HEADER_HEIGHT - BREADCRUMB_HEIGHT - tabBarHeight);
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    visible: false,
+    id: null,
+    type: null,
+  });
   const [renamePopup, setRenamePopup] = useState({
     visible: false,
     id: null,
@@ -281,6 +287,47 @@ export default function MyPostsScreen() {
   };
 
   const handleTrashDrop = (id, type) => type === 'file' ? handleDeletePost(id) : handleDeleteFolder(id);
+  const handleDeleteConfirm = () => {
+    handleTrashDrop(deleteConfirm.id, deleteConfirm.type);
+    setDeleteConfirm({ visible: false, id: null, type: null });
+  };
+
+  const handleDeleteCancel = () => {
+    if (pendingDelete && trashRect) {
+      const { id, type, pos } = pendingDelete;
+
+      // Find the current item in state if pos is missing or incomplete
+      let fallbackPos = { x: 0, y: 0 };
+      if (type === 'file') {
+        const file = posts.find(p => p.id === id);
+        if (file && file.position) fallbackPos = file.position;
+      } else {
+        const folder = folders.find(f => f.id === id);
+        if (folder && folder.position) fallbackPos = folder.position;
+      }
+      const safePos = {
+        x: (pos && typeof pos.x === 'number') ? pos.x : fallbackPos.x,
+        y: (pos && typeof pos.y === 'number') ? pos.y : fallbackPos.y,
+      };
+
+      let newX = Math.max(0, trashRect.x - ICON_SIZE - 20);
+      let newY = safePos.y;
+
+      if (safePos.x < trashRect.x) {
+        newX = safePos.x;
+        newY = Math.max(0, trashRect.y - ICON_SIZE - 20);
+      }
+
+      updatePosition(id, { x: newX, y: newY }, type);
+    }
+    setDeleteConfirm({ visible: false, id: null, type: null });
+    setPendingDelete(null);
+  };
+
+  const requestDelete = (id, type, pos) => {
+    setDeleteConfirm({ visible: true, id, type });
+    setPendingDelete({ id, type, pos });
+  };
 
   // Rename
   const handleRenameDrop = (id, type) => {
@@ -416,14 +463,7 @@ export default function MyPostsScreen() {
         rawPos.y + ICON_SIZE/2 >= trashRect.y &&
         rawPos.y + ICON_SIZE/2 <= trashRect.y + trashRect.height
       ) {
-        Alert.alert(
-          'Delete?',
-          `Permanently delete this ${type}?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'OK', onPress: () => handleTrashDrop(id, type) }
-          ]
-        );
+        requestDelete(id, type, rawPos);
         return;
       }
 
@@ -577,6 +617,19 @@ export default function MyPostsScreen() {
         </View>
       </Win95Popup>
 
+      <Win95Popup
+        visible={deleteConfirm.visible}
+        title={`Delete ${deleteConfirm.type === 'file' ? 'Post' : 'Folder'}?`}
+        onClose={handleDeleteCancel}
+        actions={[]}
+      >
+        <Text>Are you sure you want to delete this {deleteConfirm.type}?</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
+          <Win95Button title="Cancel" onPress={handleDeleteCancel} />
+          <Win95Button title="Delete" onPress={handleDeleteConfirm} style={{ marginLeft: 8 }} />
+        </View>
+      </Win95Popup>
+
       {/* Desktop icons + debug overlays */}
       <View
         style={styles.desktopContainer}
@@ -624,7 +677,7 @@ export default function MyPostsScreen() {
                   : handlePlayPause(item.audio_url, absoluteIndex)
               }
               onDragEnd={(id, pos) => handleDragEnd(id, pos, item.type)}
-              onTrashDrop={handleTrashDrop}
+              onTrashDrop={(id, pos) => requestDelete(id, item.type, pos)}
               onDropOnBack={id => moveIntoFolder(id, parentFolder, item.type)}
               onRenameDrop={handleRenameDrop}
               onDropOnFolder={(id, folderId) =>

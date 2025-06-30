@@ -3,6 +3,24 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 
+// Helper to recursively apply Win95 text style to all text in the popup
+function styleChildren(children, textStyle) {
+  return React.Children.map(children, child => {
+    if (typeof child === 'string') {
+      return <Text style={textStyle}>{child}</Text>;
+    }
+    if (React.isValidElement(child)) {
+      if (child.type === Text) {
+        return React.cloneElement(child, {
+          style: [textStyle, child.props.style]
+        }, styleChildren(child.props.children, textStyle));
+      }
+      return React.cloneElement(child, child.props, styleChildren(child.props.children, textStyle));
+    }
+    return child;
+  });
+}
+
 export default function Win95Popup({
   visible,
   title,
@@ -54,18 +72,12 @@ export default function Win95Popup({
             styles.content,
             { backgroundColor: '#C0C0C0' }
           ]}>
-            {typeof children === 'string' ? (
-              <Text style={{
-                color: t.colors.text,
-                fontFamily: t.font.family,
-                fontSize: t.font.sizes.body
-              }}>
-                {children}
-              </Text>
-            ) : (
-              children
-            )}
-          </View>
+            {styleChildren(children, {
+              color: t.colors.text,
+              fontFamily: t.font.family,
+              fontSize: t.font.sizes.body
+            })}
+          </View>       
           
           {/* Footer */}
           {buttons.length > 0 && (
