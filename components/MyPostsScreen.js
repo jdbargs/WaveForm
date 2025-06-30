@@ -242,34 +242,31 @@ export default function MyPostsScreen() {
   useEffect(() => () => soundRef.current && soundRef.current.unloadAsync(), []);
 
   useEffect(() => {
-    if (desktopHeight === 0) return;  
-    const usableHeight = desktopHeight - tabBarHeight;
-    const usableWidth  = WINDOW_WIDTH;
-
-    // helper to clamp a single position
-    const clampPos = ({ x, y }) => ({
-      x: clamp(x, 0, containerWidth  - ICON_SIZE),
-      y: clamp(y, 0, containerHeight - ICON_SIZE),
-    });
-
-    // clamp posts
+    if (desktopHeight < 100) return; // Only clamp if layout is valid
     setPosts(old =>
-      old.map(p => ({
-        ...p,
-        position: clampPos(p.position)
-      }))
+      old.map(p => {
+        const clamped = clampPos(p.position);
+        return (clamped.x !== p.position.x || clamped.y !== p.position.y)
+          ? { ...p, position: clamped }
+          : p;
+      })
     );
-    // clamp folders
     setFolders(old =>
-      old.map(f => ({
-        ...f,
-        position: clampPos(f.position)
-      }))
+      old.map(f => {
+        const clamped = clampPos(f.position);
+        return (clamped.x !== f.position.x || clamped.y !== f.position.y)
+          ? { ...f, position: clamped }
+          : f;
+      })
     );
   }, [desktopHeight]);
 
   // Delete
-  const handleDeletePost = async (id) => { await supabase.from('posts').delete().eq('id', id); setPosts((p) => p.filter((x) => x.id !== id)); };
+  const handleDeletePost = async (id) => { 
+    await supabase.from('posts').delete().eq('id', id); 
+    setPosts((p) => p.filter((x) => x.id !== id)); 
+  };
+
   const handleDeleteFolder = async (id) => {
     const { data, error } = await supabase
       .from('folders')
@@ -288,6 +285,7 @@ export default function MyPostsScreen() {
 
   const handleTrashDrop = (id, type) => type === 'file' ? handleDeletePost(id) : handleDeleteFolder(id);
   const handleDeleteConfirm = () => {
+    if (!deleteConfirm.visible) return;
     handleTrashDrop(deleteConfirm.id, deleteConfirm.type);
     setDeleteConfirm({ visible: false, id: null, type: null });
   };
@@ -371,20 +369,23 @@ export default function MyPostsScreen() {
     let pos = { x, y };
 
     // 2) Build “forbidden” zones around each drop-icon
-    const forbiddenZones = [
-      {
+    const forbiddenZones = [];
+    if (isValidRect(trashRect)) {
+      forbiddenZones.push({
         x: trashRect.x - DROP_PADDING,
         y: trashRect.y - DROP_PADDING,
         width:  trashRect.width  + DROP_PADDING * 2,
         height: trashRect.height + DROP_PADDING * 2,
-      },
-      {
+      });
+    }
+    if (isValidRect(portalRect)) {
+      forbiddenZones.push({
         x: portalRect.x - DROP_PADDING,
         y: portalRect.y - DROP_PADDING,
         width:  portalRect.width  + DROP_PADDING * 2,
         height: portalRect.height + DROP_PADDING * 2,
-      }
-    ];
+      });
+    }
 
     // 3) AABB intersection test
     const intersects = (a, b) =>
@@ -448,16 +449,17 @@ export default function MyPostsScreen() {
   // inside MyPostsScreen
 
   // 1️⃣ build this handler once per render:
+  const isValidRect = rect =>
+    rect &&
+    rect.width > 0 &&
+    rect.height > 0 &&
+    !(rect.x === 0 && rect.y === 0);
+
   const handleDragEnd = useCallback(
     (id, rawPos, type) => {
-      // First, clamp & reposition the item
-      updatePosition(id, rawPos, type);
-
-      // If the trash zone is defined and the drop is inside it, delete
+      // Only check trash if rect is valid
       if (
-        trashRect &&
-        trashRect.width > 0 &&
-        trashRect.height > 0 &&
+        isValidRect(trashRect) &&
         rawPos.x + ICON_SIZE/2 >= trashRect.x &&
         rawPos.x + ICON_SIZE/2 <= trashRect.x + trashRect.width &&
         rawPos.y + ICON_SIZE/2 >= trashRect.y &&
@@ -467,15 +469,14 @@ export default function MyPostsScreen() {
         return;
       }
 
-      // If the portal zone is defined and the drop is inside it, move back up
+      // Only check portal if rect is valid
       if (
-        portalRect &&
+        isValidRect(portalRect) &&
         rawPos.x + ICON_SIZE/2 >= portalRect.x &&
         rawPos.x + ICON_SIZE/2 <= portalRect.x + portalRect.width &&
         rawPos.y + ICON_SIZE/2 >= portalRect.y &&
         rawPos.y + ICON_SIZE/2 <= portalRect.y + portalRect.height
       ) {
-        // Move item back to its parent folder
         handleRenameDrop(id, type);
         return;
       }
@@ -492,10 +493,12 @@ export default function MyPostsScreen() {
           return;
         }
       }
+
+      // Only update position if not dropped on trash/portal/folder
+      updatePosition(id, rawPos, type);
     },
     [trashRect, portalRect, folderRects, updatePosition, moveIntoFolder, parentFolder]
   );
-
 
   // Visible
   const visibleFolders = folders.filter((f) => f.parentFolderId === currentFolderId);

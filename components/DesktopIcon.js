@@ -1,4 +1,3 @@
-// components/DesktopIcon.js
 import React, { useRef, useEffect } from 'react';
 import {
   View,
@@ -22,46 +21,23 @@ export default function DesktopIcon({
   trashRect,
   backRect = null
 }) {
-  // Animated value for position
-  // ensure we always have numeric x & y
-  const { x = 0, y = 0 } = item.position || {};
-  const initialPos = { x: Number(x), y: Number(y) };
-  const pan = useRef(new Animated.ValueXY(initialPos)).current;
+  // 1. pan is always just the drag offset
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const dragging = useRef(false);
 
-
-  // Sync to prop changes
+  // 2. Reset pan to zero when item.position changes (unless dragging)
   useEffect(() => {
-    pan.setValue(item.position);
+    if (!dragging.current) {
+      pan.setValue({ x: 0, y: 0 });
+    }
   }, [item.position]);
 
-  // Helpers to test a point against a rect
-  const isPointInRect = (x, y, rect) =>
-    x >= rect.x &&
-    x <= rect.x + rect.width &&
-    y >= rect.y &&
-    y <= rect.y + rect.height;
-
-  const isOverFolder = (pos) => {
-    const cx = pos.x + ICON_SIZE / 2;
-    const cy = pos.y + ICON_SIZE / 2;
-    return folderRects.find((r) => isPointInRect(cx, cy, r));
-  };
-
-  const isOverTrash = (pos) => {
-    if (!trashRect) return false;
-    const cx = pos.x + ICON_SIZE / 2;
-    const cy = pos.y + ICON_SIZE / 2;
-    return isPointInRect(cx, cy, trashRect);
-  };
-
-  // PanResponder for dragging
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-
       onPanResponderGrant: () => {
-        pan.setOffset({ x: pan.x._value, y: pan.y._value });
+        dragging.current = true;
         pan.setValue({ x: 0, y: 0 });
       },
       onPanResponderMove: Animated.event(
@@ -69,32 +45,13 @@ export default function DesktopIcon({
         { useNativeDriver: false }
       ),
       onPanResponderRelease: () => {
-        pan.flattenOffset();
-        const newPos = { x: pan.x._value, y: pan.y._value };
-        const cx = newPos.x + ICON_SIZE/2;
-        const cy = newPos.y + ICON_SIZE/2;
-
-        // 0) Dropped on Up‐arrow? (move back to parent)
-        if (backRect && cx >= backRect.x && cx <= backRect.x + backRect.width &&
-            cy >= backRect.y && cy <= backRect.y + backRect.height) {
-          onDropOnBack(item.id);
-          return;
-        }
-
-        // 1) Trash drop?
-        if (isOverTrash(newPos)) {
-          onTrashDrop(item.id, item.type);
-          return;
-        }
-
-        // 2) Folder drop?
-        const folder = isOverFolder(newPos);
-        if (folder) {
-          onDropOnFolder(item.id, folder.id);
-          return;
-        }
-
-        // 3) Otherwise, just reposition
+        dragging.current = false;
+        // Calculate new absolute position
+        const newPos = {
+          x: (item.position?.x || 0) + pan.x._value,
+          y: (item.position?.y || 0) + pan.y._value,
+        };
+        pan.setValue({ x: 0, y: 0 }); // Reset for next drag
         onDragEnd(item.id, newPos);
       }
     })
@@ -104,7 +61,11 @@ export default function DesktopIcon({
     <Animated.View
       {...panResponder.panHandlers}
       style={[
-        { position: 'absolute' },
+        {
+          position: 'absolute',
+          left: item.position.x,
+          top: item.position.y,
+        },
         { transform: pan.getTranslateTransform() }
       ]}
     >
