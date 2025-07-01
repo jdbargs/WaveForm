@@ -36,6 +36,9 @@ const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
 
 
 export default function MyPostsScreen() {
+  const trashRectRef = useRef(null);
+  const portalRectRef = useRef(null);
+  const folderRectsRef = useRef([]);
   const navigation = useNavigation();
   const t = useTheme();
   const [desktopHeight, setDesktopHeight] = useState(0);
@@ -62,6 +65,9 @@ export default function MyPostsScreen() {
     value: '',
   });
   
+  useEffect(() => { trashRectRef.current = trashRect; }, [trashRect]);
+  useEffect(() => { portalRectRef.current = portalRect; }, [portalRect]);
+  useEffect(() => { folderRectsRef.current = folderRects; }, [folderRects]);
 
   useFocusEffect(
     useCallback(() => {
@@ -74,6 +80,22 @@ export default function MyPostsScreen() {
       headerShown: false
     });
   }, [navigation]);
+
+  useEffect(() => {
+    if (!desktopHeight) return;
+    setPosts(posts =>
+      posts.map(p => ({
+        ...p,
+        position: clampPos(p.position, desktopHeight, tabBarHeight)
+      }))
+    );
+    setFolders(folders =>
+      folders.map(f => ({
+        ...f,
+        position: clampPos(f.position, desktopHeight, tabBarHeight)
+      }))
+    );
+  }, [desktopHeight, tabBarHeight]);
 
   // Auth/profile
   const [username, setUsername] = useState('');
@@ -187,10 +209,14 @@ export default function MyPostsScreen() {
             // fallback if user left the field blank
             const folderName = name?.trim() || 'New Folder';
             // Pick a random position inside the desktop
-            const defaultPos = {
-              x: Math.random() * (containerWidth  - ICON_SIZE),
-              y: Math.random() * (containerHeight - ICON_SIZE),
-            };
+            const defaultPos = clampPos(
+              {
+                x: Math.random() * (containerWidth  - ICON_SIZE),
+                y: Math.random() * (containerHeight - ICON_SIZE),
+              },
+              desktopHeight || WINDOW_HEIGHT,
+              tabBarHeight || 0
+            );
             // Insert into Supabase
             const { data: newFolder, error } = await supabase
               .from('folders')
@@ -357,9 +383,11 @@ export default function MyPostsScreen() {
       console.warn('Skipping updatePosition: desktopHeight or tabBarHeight not set');
       return;
     }
-    console.log('rawPos:', rawPos, 'trashRect:', trashRect);
 
     let pos = clampPos(rawPos, desktopHeight, tabBarHeight);
+
+    // ...inside updatePosition...
+    console.log('UPDATE POSITION', id, 'rawPos', rawPos, 'final pos', pos);
 
     // 2) Build “forbidden” zones around each drop-icon
     const forbiddenZones = [];
@@ -409,12 +437,12 @@ export default function MyPostsScreen() {
       setPosts(p =>
         p.map(x => x.id === id ? { ...x, position: pos } : x)
       );
-      await supabase.from('posts').update({ position: pos }).eq('id', id);
+      // await supabase.from('posts').update({ position: pos }).eq('id', id);
     } else {
       setFolders(f =>
         f.map(x => x.id === id ? { ...x, position: pos } : x)
       );
-      await supabase.from('folders').update({ position: pos }).eq('id', id);
+      // await supabase.from('folders').update({ position: pos }).eq('id', id);
     }
   };
 
@@ -451,8 +479,11 @@ export default function MyPostsScreen() {
     rect.height > 0 &&
     !(rect.x === 0 && rect.y === 0);
 
-  const handleDragEnd = useCallback(
+  const handleDragEnd = useCallback(    
     (id, rawPos, type) => {
+      const trashRect = trashRectRef.current;
+      const portalRect = portalRectRef.current;
+      const folderRects = folderRectsRef.current;
       // Only check trash if rect is valid
       if (
         isValidRect(trashRect) &&

@@ -3,11 +3,7 @@ import { View, Animated, PanResponder, Image, Text, TouchableWithoutFeedback } f
 
 const ICON_SIZE = 80;
 
-export default function DesktopIcon({
-  item,
-  onPress,
-  onDragEnd,
-}) {
+export default function DesktopIcon({ item, onPress, onDragEnd }) {
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const dragging = useRef(false);
 
@@ -21,20 +17,24 @@ export default function DesktopIcon({
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
+      onPanResponderGrant: (evt, gestureState) => {
         dragging.current = true;
+        // Jump the icon so its top-left is under the finger
+        // (simulate by immediately moving to finger position)
         pan.setValue({ x: 0, y: 0 });
       },
       onPanResponderMove: (evt, gestureState) => {
         pan.setValue({ x: gestureState.dx, y: gestureState.dy });
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: (evt, gestureState) => {
         dragging.current = false;
+        // Place the icon's top-left where the finger is
         const newPos = {
-          x: (item.position?.x ?? 0) + pan.x._value,
-          y: (item.position?.y ?? 0) + pan.y._value,
+          x: (item.position?.x ?? 0) + gestureState.dx,
+          y: (item.position?.y ?? 0) + gestureState.dy,
         };
         onDragEnd(item.id, newPos);
+        pan.setValue({ x: 0, y: 0 });
       }
     })
   ).current;
