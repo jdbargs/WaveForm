@@ -95,6 +95,11 @@ export default function MyPostsScreen() {
     })();
   }, []);
 
+  const clampPos = (pos, desktopHeight, tabBarHeight) => ({
+    x: clamp(pos.x, 0, WINDOW_WIDTH - ICON_SIZE),
+    y: clamp(pos.y, 0, (desktopHeight - tabBarHeight) - ICON_SIZE),
+  });
+
   const handleUsernameSave = async () => {
     if (!userId) return;
     const { error } = await supabase
@@ -120,8 +125,11 @@ export default function MyPostsScreen() {
         data.map((p, i) => ({
           ...p,
           parentFolderId: p.folder_id ?? null,
-          position:
+          position: clampPos(
             p.position ?? { x: (i % 4) * 100 + 20, y: Math.floor(i / 4) * 120 + 20 },
+            desktopHeight || WINDOW_HEIGHT,
+            tabBarHeight || 0
+          ),
           type: 'file'
         }))
       );
@@ -138,8 +146,11 @@ export default function MyPostsScreen() {
         data.map((f, i) => ({
           ...f,
           parentFolderId: f.parent_folder_id,
-          position:
+          position: clampPos(
             f.position ?? { x: (i % 4) * 100 + 20, y: Math.floor(i / 4) * 120 + 20 },
+            desktopHeight || WINDOW_HEIGHT,
+            tabBarHeight || 0
+          ),
           type: 'folder'
         }))
       );
@@ -240,26 +251,6 @@ export default function MyPostsScreen() {
     }
   };
   useEffect(() => () => soundRef.current && soundRef.current.unloadAsync(), []);
-
-  useEffect(() => {
-    if (desktopHeight < 100) return; // Only clamp if layout is valid
-    setPosts(old =>
-      old.map(p => {
-        const clamped = clampPos(p.position);
-        return (clamped.x !== p.position.x || clamped.y !== p.position.y)
-          ? { ...p, position: clamped }
-          : p;
-      })
-    );
-    setFolders(old =>
-      old.map(f => {
-        const clamped = clampPos(f.position);
-        return (clamped.x !== f.position.x || clamped.y !== f.position.y)
-          ? { ...f, position: clamped }
-          : f;
-      })
-    );
-  }, [desktopHeight]);
 
   // Delete
   const handleDeletePost = async (id) => { 
@@ -362,11 +353,13 @@ export default function MyPostsScreen() {
     // 1) Clamp into desktop bounds
     const usableHeight = desktopHeight - tabBarHeight;
     const usableWidth  = WINDOW_WIDTH;
+    if (usableHeight <= 0 || usableWidth <= 0) {
+      console.warn('Skipping updatePosition: desktopHeight or tabBarHeight not set');
+      return;
+    }
     console.log('rawPos:', rawPos, 'trashRect:', trashRect);
 
-    let x = clamp(rawPos.x, 0, usableWidth - ICON_SIZE);
-    let y = clamp(rawPos.y, 0, usableHeight - ICON_SIZE);
-    let pos = { x, y };
+    let pos = clampPos(rawPos, desktopHeight, tabBarHeight);
 
     // 2) Build “forbidden” zones around each drop-icon
     const forbiddenZones = [];
@@ -407,6 +400,9 @@ export default function MyPostsScreen() {
         box.y = pos.y;
       }
     });
+    pos = clampPos(pos, desktopHeight, tabBarHeight);
+    
+    console.log('Setting icon', id, 'to', pos); 
 
     // 5) Commit the new “safe” position
     if (type === 'file') {
