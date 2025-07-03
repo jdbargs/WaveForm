@@ -1,68 +1,82 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Animated, PanResponder, Image, Text, TouchableWithoutFeedback } from 'react-native';
+import {
+  View,
+  Animated,
+  PanResponder,
+  Image,
+  Text,
+  TouchableWithoutFeedback,
+} from 'react-native';
 
 const ICON_SIZE = 80;
 
 export default function DesktopIcon({ item, onPress, onDragEnd }) {
-  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const posRef = useRef(item.position);
-  const dragging = useRef(false);
+  const pan = useRef(new Animated.ValueXY()).current;
 
+  // 1️⃣ On mount only, set the Animated value to the item's position.
+  //    We do *not* touch offset here.
   useEffect(() => {
-    if (!dragging.current) {
-      pan.setValue({ x: 0, y: 0 });
-    }
-  }, [item.position]);
+    pan.setValue({ x: item.position.x, y: item.position.y });
+  }, []);
 
-  useEffect(() => { 
-    posRef.current = item.position;
-    // reset any lingering transform
-    pan.setValue({ x: 0, y: 0 });
-  }, [item.position]);
-
+  // 2️⃣ Build your PanResponder once, using the
+  // "extract offset on grant / flatten on release" pattern.
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+
       onPanResponderGrant: () => {
-      pan.setValue({ x: 0, y: 0 });
-    },
-    onPanResponderMove: (_, { dx, dy }) => {
-      pan.setValue({ x: dx, y: dy });
-    },
-    onPanResponderRelease: (_, { dx, dy }) => {
-      // now use the _current_ position, not the one from mount
-      const newPos = {
-        x: posRef.current.x + dx,
-        y: posRef.current.y + dy,
-      };
-      onDragEnd(item.id, newPos);
-      pan.setValue({ x: 0, y: 0 });
-    },
-  })).current;
+        // Take whatever absolute is in pan.x/_value
+        // and push it into offset, zero out the delta.
+        pan.setOffset({
+          x: pan.x._value,
+          y: pan.y._value,
+        });
+        pan.setValue({ x: 0, y: 0 });
+      },
+
+      onPanResponderMove: Animated.event(
+        [ null, { dx: pan.x, dy: pan.y } ],
+        { useNativeDriver: false }
+      ),
+
+      onPanResponderRelease: () => {
+        // Merge offset + delta into the base value, clear offset
+        pan.flattenOffset();
+        // Read out the new absolute
+        const newX = pan.x._value;
+        const newY = pan.y._value;
+        // Tell your parent to persist it
+        onDragEnd(item.id, { x: newX, y: newY });
+        // **no manual setValue or setOffset here**
+      },
+    })
+  ).current;
 
   return (
     <Animated.View
       {...panResponder.panHandlers}
       style={{
         position: 'absolute',
-        left: item.position.x,
-        top: item.position.y,
+        // All movement comes from transform now
         transform: pan.getTranslateTransform(),
       }}
     >
-      <TouchableWithoutFeedback onPress={() => onPress && onPress(item)}>
+      <TouchableWithoutFeedback onPress={() => onPress?.(item)}>
         <View style={{ alignItems: 'center' }}>
           <Image
-            source={item.type === 'folder'
-              ? require('../assets/images/folder.png')
-              : require('../assets/images/file.png')}
+            source={
+              item.type === 'folder'
+                ? require('../assets/images/folder.png')
+                : require('../assets/images/file.png')
+            }
             style={{ width: ICON_SIZE, height: ICON_SIZE }}
             resizeMode="contain"
           />
           <Text
             numberOfLines={1}
-            style={{ width: 80, textAlign: 'center', marginTop: 4 }}
+            style={{ width: ICON_SIZE, textAlign: 'center', marginTop: 4 }}
           >
             {item.caption || item.name}
           </Text>

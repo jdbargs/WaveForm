@@ -38,6 +38,8 @@ const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
 export default function MyPostsScreen() {
   const trashRectRef = useRef(null);
   const portalRectRef = useRef(null);
+  const trashImageRef = useRef(null);
+  const portalImageRef = useRef(null);
   const folderRectsRef = useRef([]);
   const navigation = useNavigation();
   const t = useTheme();
@@ -80,6 +82,20 @@ export default function MyPostsScreen() {
       headerShown: false
     });
   }, [navigation]);
+
+    useEffect(() => {
+    if (trashImageRef.current) {
+      trashImageRef.current.measure((x, y, width, height, pageX, pageY) => {
+        setTrashRect({ x: pageX, y: pageY, width, height });
+      });
+    }
+    if (portalImageRef.current) {
+      portalImageRef.current.measure((x, y, width, height, pageX, pageY) => {
+        setPortalRect({ x: pageX, y: pageY, width, height });
+      });
+    }
+  }, [desktopHeight, tabBarHeight]);
+
 
   useEffect(() => {
     if (!desktopHeight) return;
@@ -386,8 +402,12 @@ export default function MyPostsScreen() {
 
     let pos = clampPos(rawPos, desktopHeight, tabBarHeight);
 
-    // ...inside updatePosition...
-    console.log('UPDATE POSITION', id, 'rawPos', rawPos, 'final pos', pos);
+    // ADD THESE LOGS:
+    console.log('updatePosition:');
+    console.log('  icon rawPos:', rawPos);
+    console.log('  icon clamped pos:', pos);
+    console.log('  trashRect:', trashRect);
+    console.log('  portalRect:', portalRect);
 
     // 2) Build “forbidden” zones around each drop-icon
     const forbiddenZones = [];
@@ -429,8 +449,6 @@ export default function MyPostsScreen() {
       }
     });
     pos = clampPos(pos, desktopHeight, tabBarHeight);
-    
-    console.log('Setting icon', id, 'to', pos); 
 
     // 5) Commit the new “safe” position
     if (type === 'file') {
@@ -612,15 +630,6 @@ export default function MyPostsScreen() {
       </Win95Button>
       </View>
 
-      {/* Popup for testing */}
-      <Win95Popup
-        visible={showPopup}
-        title="Test Popup"
-        onClose={() => setShowPopup(false)}
-      >
-        <Text>This is a test of Win95Popup!</Text>
-      </Win95Popup>
-
       {/* Follow request popup */}
       {request && (
         <Win95Popup
@@ -729,6 +738,7 @@ export default function MyPostsScreen() {
         })}
         {/* Trash and Portal Icon */}
         <Image
+          ref={trashImageRef}
           source={require('../assets/images/trash.png')}
           onLayout={e => {
             setTrashRect(e.nativeEvent.layout);
@@ -743,6 +753,7 @@ export default function MyPostsScreen() {
           resizeMode="contain"
         />
         <Image
+          ref={portalImageRef}
           source={require('../assets/images/portal.png')}
           onLayout={e => setPortalRect(e.nativeEvent.layout)}
           style={{
