@@ -533,7 +533,14 @@ export default function MyPostsScreen() {
   const visibleItems = [...visibleFolders, ...visiblePosts];
 
   // Drop zones
-  const folderRects = visibleFolders.map((f) => ({ id: f.id, x: f.position.x, y: f.position.y, width: ICON_SIZE, height: ICON_SIZE }));
+  const folderRects = visibleFolders.map((f) => ({ 
+    id: f.id, 
+    x: f.position.x, 
+    y: f.position.y, 
+    width: ICON_SIZE, 
+    height: ICON_SIZE 
+  }));
+
 
   const styles = StyleSheet.create({ 
     safeArea: { flex: 1, backgroundColor: t.colors.background }, 
