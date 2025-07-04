@@ -423,13 +423,6 @@ export default function MyPostsScreen() {
 
     let pos = clampPos(rawPos, desktopHeight, tabBarHeight);
 
-    // ADD THESE LOGS:
-    console.log('updatePosition:');
-    console.log('  icon rawPos:', rawPos);
-    console.log('  icon clamped pos:', pos);
-    console.log('  trashRect:', trashRect);
-    console.log('  portalRect:', portalRect);
-
     // 2) Build “forbidden” zones around each drop-icon
     const forbiddenZones = [];
     if (isValidRect(trashRect)) {
@@ -493,12 +486,12 @@ export default function MyPostsScreen() {
       setPosts(p =>
         p.map(x => x.id === id ? { ...x, position: pos } : x)
       );
-      // await supabase.from('posts').update({ position: pos }).eq('id', id);
+      await supabase.from('posts').update({ position: pos }).eq('id', id);
     } else {
       setFolders(f =>
         f.map(x => x.id === id ? { ...x, position: pos } : x)
       );
-      // await supabase.from('folders').update({ position: pos }).eq('id', id);
+      await supabase.from('folders').update({ position: pos }).eq('id', id);
     }
   };
 
@@ -721,33 +714,6 @@ export default function MyPostsScreen() {
         style={styles.desktopContainer}
         onLayout={(e) => setDesktopHeight(e.nativeEvent.layout.height)}
       >
-        {/* DEBUG: show trash & portal drop zones */}
-        {trashRect && (
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: trashRect.x,
-              top:  trashRect.y,
-              width: trashRect.width,
-              height:trashRect.height,
-              backgroundColor: 'rgba(255, 0, 0, 0.3)'
-            }}
-          />
-        )}
-        {portalRect && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: portalRect.x,
-            top: portalRect.y,
-            width: portalRect.width,
-            height: portalRect.height,
-            backgroundColor: 'rgba(0, 0, 255, 0.3)'
-          }}
-        />
-      )}
         {visibleItems.map((item) => {
           const absoluteIndex =
             item.type === 'file'
