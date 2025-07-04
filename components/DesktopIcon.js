@@ -19,6 +19,18 @@ export default function DesktopIcon({ item, onPress, onDragEnd }) {
     pan.setValue({ x: item.position.x, y: item.position.y });
   }, []);
 
+  // ...after your existing useEffect that runs on mount:
+  useEffect(() => {
+    // Whenever the parent's item.position changes,
+    // reset any offset and jump the Animated.Value there
+    pan.setOffset({ x: 0, y: 0 });
+    pan.setValue({
+      x: item.position.x,
+      y: item.position.y
+    });
+  }, [item.position.x, item.position.y]);
+
+
   // 2️⃣ Build your PanResponder once, using the
   // "extract offset on grant / flatten on release" pattern.
   const panResponder = useRef(

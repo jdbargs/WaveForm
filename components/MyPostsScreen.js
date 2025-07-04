@@ -449,22 +449,6 @@ export default function MyPostsScreen() {
       });
     }
 
-    // Header
-    forbiddenZones.push({
-      x: 0,
-      y: 0,
-      width: WINDOW_WIDTH,
-      height: HEADER_HEIGHT,
-    });
-
-    // Breadcrumb
-    forbiddenZones.push({
-      x: 0,
-      y: HEADER_HEIGHT,
-      width: WINDOW_WIDTH,
-      height: BREADCRUMB_HEIGHT,
-    });
-
     // 3) AABB intersection test
     const intersects = (a, b) =>
       a.x < b.x + b.width &&
@@ -472,26 +456,36 @@ export default function MyPostsScreen() {
       a.y < b.y + b.height &&
       a.y + a.height > b.y;
 
-    const box = { x: pos.x, y: pos.y, width: ICON_SIZE, height: ICON_SIZE };
+    let box = { x: pos.x, y: pos.y, width: ICON_SIZE, height: ICON_SIZE };
+    let maxTries = 10; // Prevent infinite loops
 
     // 4) If it collides, push it above that zone
-    forbiddenZones.forEach(zone => {
-      if (intersects(box, zone)) {
-        // Try to push below the forbidden zone
-        pos.y = zone.y + zone.height + 1;
-        // If that would go off the bottom, push above
-        if (pos.y + ICON_SIZE > usableHeight) {
-          pos.y = zone.y - ICON_SIZE - 1;
+    // ...existing code...
+    while (maxTries-- > 0) {
+      let collided = false;
+      for (const zone of forbiddenZones) {
+        if (intersects(box, zone)) {
+          console.log('FORBIDDEN ZONE HIT', zone, box);
+          // Try to push below the forbidden zone
+          pos.y = zone.y + zone.height + 1;
+          // If that would go off the bottom, push above
+          if (pos.y + ICON_SIZE > usableHeight) {
+            pos.y = zone.y - ICON_SIZE - 1;
+          }
+          // Clamp to safe area
+          pos.y = clamp(pos.y, HEADER_HEIGHT + BREADCRUMB_HEIGHT, usableHeight - ICON_SIZE);
+          pos.x = clamp(pos.x, 0, usableWidth - ICON_SIZE);
+          // Update box for next check
+          box.y = pos.y;
+          box.x = pos.x;
+          collided = true;
+          break; // Start over, since we moved
         }
-        // Clamp to safe area
-        pos.y = clamp(pos.y, HEADER_HEIGHT + BREADCRUMB_HEIGHT, usableHeight - ICON_SIZE);
-        // Optionally, clamp x as well
-        pos.x = clamp(pos.x, 0, usableWidth - ICON_SIZE);
-        // Update box for next check
-        box.y = pos.y;
-        box.x = pos.x;
       }
-    });
+      if (!collided) break; // No more collisions, we're safe
+    }
+
+    // ...rest of updatePosition...
     pos = clampPos(pos, desktopHeight, tabBarHeight);
 
     // 5) Commit the new “safe” position
@@ -567,6 +561,7 @@ export default function MyPostsScreen() {
         rawPos.y + ICON_SIZE/2 <= portalRect.y + portalRect.height
       ) {
         handleRenameDrop(id, type);
+        updatePosition(id, rawPos, type);
         return;
       }
 
