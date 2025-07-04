@@ -41,6 +41,8 @@ export default function MyPostsScreen() {
   const trashImageRef = useRef(null);
   const portalImageRef = useRef(null);
   const folderRectsRef = useRef([]);
+  const desktopRef = useRef(null);
+  const [desktopOffset, setDesktopOffset] = useState({ x: 0, y: 0 });
   const navigation = useNavigation();
   const t = useTheme();
   const [desktopHeight, setDesktopHeight] = useState(0);
@@ -83,18 +85,28 @@ export default function MyPostsScreen() {
     });
   }, [navigation]);
 
-    useEffect(() => {
-    if (trashImageRef.current) {
+  useEffect(() => {
+    if (trashImageRef.current && desktopOffset) {
       trashImageRef.current.measure((x, y, width, height, pageX, pageY) => {
-        setTrashRect({ x: pageX, y: pageY, width, height });
+        setTrashRect({
+          x: pageX - desktopOffset.x,
+          y: pageY - desktopOffset.y,
+          width,
+          height,
+        });
       });
     }
-    if (portalImageRef.current) {
+    if (portalImageRef.current && desktopOffset) {
       portalImageRef.current.measure((x, y, width, height, pageX, pageY) => {
-        setPortalRect({ x: pageX, y: pageY, width, height });
+        setPortalRect({
+          x: pageX - desktopOffset.x,
+          y: pageY - desktopOffset.y,
+          width,
+          height,
+        });
       });
     }
-  }, [desktopHeight, tabBarHeight]);
+  }, [desktopHeight, tabBarHeight, desktopOffset]);
 
 
   useEffect(() => {
@@ -112,6 +124,15 @@ export default function MyPostsScreen() {
       }))
     );
   }, [desktopHeight, tabBarHeight]);
+
+  useEffect(() => {
+    if (desktopRef.current) {
+      desktopRef.current.measure((x, y, width, height, pageX, pageY) => {
+        setDesktopOffset({ x: pageX, y: pageY });
+      });
+    }
+  }, [desktopHeight, tabBarHeight]);
+
 
   // Auth/profile
   const [username, setUsername] = useState('');
@@ -428,6 +449,22 @@ export default function MyPostsScreen() {
       });
     }
 
+    // Header
+    forbiddenZones.push({
+      x: 0,
+      y: 0,
+      width: WINDOW_WIDTH,
+      height: HEADER_HEIGHT,
+    });
+
+    // Breadcrumb
+    forbiddenZones.push({
+      x: 0,
+      y: HEADER_HEIGHT,
+      width: WINDOW_WIDTH,
+      height: BREADCRUMB_HEIGHT,
+    });
+
     // 3) AABB intersection test
     const intersects = (a, b) =>
       a.x < b.x + b.width &&
@@ -440,12 +477,19 @@ export default function MyPostsScreen() {
     // 4) If it collides, push it above that zone
     forbiddenZones.forEach(zone => {
       if (intersects(box, zone)) {
-        // move it immediately above the forbidden area
-        pos.y = zone.y - ICON_SIZE - 1;
-        // re‐clamp so it never goes negative
-        pos.y = clamp(pos.y, 0, usableHeight - ICON_SIZE);
-        // update our test box
+        // Try to push below the forbidden zone
+        pos.y = zone.y + zone.height + 1;
+        // If that would go off the bottom, push above
+        if (pos.y + ICON_SIZE > usableHeight) {
+          pos.y = zone.y - ICON_SIZE - 1;
+        }
+        // Clamp to safe area
+        pos.y = clamp(pos.y, HEADER_HEIGHT + BREADCRUMB_HEIGHT, usableHeight - ICON_SIZE);
+        // Optionally, clamp x as well
+        pos.x = clamp(pos.x, 0, usableWidth - ICON_SIZE);
+        // Update box for next check
         box.y = pos.y;
+        box.x = pos.x;
       }
     });
     pos = clampPos(pos, desktopHeight, tabBarHeight);
@@ -678,6 +722,7 @@ export default function MyPostsScreen() {
 
       {/* Desktop icons + debug overlays */}
       <View
+        ref={desktopRef}
         style={styles.desktopContainer}
         onLayout={(e) => setDesktopHeight(e.nativeEvent.layout.height)}
       >
