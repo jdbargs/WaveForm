@@ -41,6 +41,7 @@ export default function MyPostsScreen() {
   const trashImageRef = useRef(null);
   const portalImageRef = useRef(null);
   const folderRectsRef = useRef([]);
+  const upRectRef = useRef(null);
   const desktopRef = useRef(null);
   const [desktopOffset, setDesktopOffset] = useState({ x: 0, y: 0 });
   const navigation = useNavigation();
@@ -72,6 +73,7 @@ export default function MyPostsScreen() {
   useEffect(() => { trashRectRef.current = trashRect; }, [trashRect]);
   useEffect(() => { portalRectRef.current = portalRect; }, [portalRect]);
   useEffect(() => { folderRectsRef.current = folderRects; }, [folderRects]);
+  useEffect(() => { upRectRef.current = upRect; }, [upRect]);
 
   useFocusEffect(
     useCallback(() => {
@@ -449,7 +451,12 @@ export default function MyPostsScreen() {
       a.y < b.y + b.height &&
       a.y + a.height > b.y;
 
-    let box = { x: pos.x, y: pos.y, width: ICON_SIZE, height: ICON_SIZE };
+    const box = {
+      x: rawPos.x - desktopOffset.x,
+      y: rawPos.y - desktopOffset.y,
+      width: ICON_SIZE,
+      height: ICON_SIZE,
+    };
     let maxTries = 10; // Prevent infinite loops
 
     // 4) If it collides, push it above that zone
@@ -496,6 +503,7 @@ export default function MyPostsScreen() {
   };
 
   const moveIntoFolder = async (id, folderId, type) => {
+    console.log('Moving', id, 'into folder', folderId, 'type:', type);
     if (type === 'file') {
       setPosts((p) =>
         p.map((x) =>
@@ -507,6 +515,7 @@ export default function MyPostsScreen() {
         .update({ folder_id: folderId })
         .eq('id', id);
     } else {
+      console.log('Before:', folders.find(f => f.id === id));
       setFolders((f) =>
         f.map((x) =>
           x.id === id ? { ...x, parentFolderId: folderId } : x
@@ -516,6 +525,9 @@ export default function MyPostsScreen() {
         .from('folders')
         .update({ parent_folder_id: folderId })
         .eq('id', id);
+      setTimeout(() => {
+        console.log('After:', folders.find(f => f.id === id));
+      }, 1000);
     }
   };
 
@@ -528,54 +540,83 @@ export default function MyPostsScreen() {
     rect.height > 0 &&
     !(rect.x === 0 && rect.y === 0);
 
-  const handleDragEnd = useCallback(    
-    (id, rawPos, type) => {
-      const trashRect = trashRectRef.current;
-      const portalRect = portalRectRef.current;
-      const folderRects = folderRectsRef.current;
-      // Only check trash if rect is valid
-      if (
-        isValidRect(trashRect) &&
-        rawPos.x + ICON_SIZE/2 >= trashRect.x &&
-        rawPos.x + ICON_SIZE/2 <= trashRect.x + trashRect.width &&
-        rawPos.y + ICON_SIZE/2 >= trashRect.y &&
-        rawPos.y + ICON_SIZE/2 <= trashRect.y + trashRect.height
-      ) {
-        requestDelete(id, type, rawPos);
-        return;
-      }
+  const handleDragEnd = useCallback((id, rawPos, type, folderZones) => {
+    // Build the file’s bounding box at its drop position:
+    console.log('handleDragEnd called', { id, rawPos, type });
+    const box = {
+      x:      rawPos.x,
+      y:      rawPos.y,
+      width:  ICON_SIZE,
+      height: ICON_SIZE,
+    };
 
-      // Only check portal if rect is valid
-      if (
-        isValidRect(portalRect) &&
-        rawPos.x + ICON_SIZE/2 >= portalRect.x &&
-        rawPos.x + ICON_SIZE/2 <= portalRect.x + portalRect.width &&
-        rawPos.y + ICON_SIZE/2 >= portalRect.y &&
-        rawPos.y + ICON_SIZE/2 <= portalRect.y + portalRect.height
-      ) {
-        handleRenameDrop(id, type);
-        updatePosition(id, rawPos, type);
-        return;
-      }
+    const trashZone  = trashRectRef.current;
+    const portalZone = portalRectRef.current;
+    const backZone   = upRectRef.current;
 
-      // Otherwise, check folder drop zones
-      for (const { id: fid, x, y, width, height } of folderRects) {
-        if (
-          rawPos.x + ICON_SIZE/2 >= x &&
-          rawPos.x + ICON_SIZE/2 <= x + width &&
-          rawPos.y + ICON_SIZE/2 >= y &&
-          rawPos.y + ICON_SIZE/2 <= y + height
-        ) {
-          moveIntoFolder(id, fid, type);
-          return;
-        }
-      }
+    // A simple intersection test
+    const intersects = (a, b) =>
+      a.x < b.x + b.width &&
+      a.x + a.width  > b.x &&
+      a.y < b.y + b.height &&
+      a.y + a.height > b.y;
 
-      // Only update position if not dropped on trash/portal/folder
+    // 1) Trash
+    if (trashZone && intersects(box, {
+          x: trashZone.x - DROP_PADDING,
+          y: trashZone.y - DROP_PADDING,
+          width:  trashZone.width  + DROP_PADDING * 2,
+          height: trashZone.height + DROP_PADDING * 2,
+    })) {
+      requestDelete(id, type, rawPos);
+      return;
+    }
+
+    // 2) Rename-portal
+    if (portalZone && intersects(box, {
+          x: portalZone.x - DROP_PADDING,
+          y: portalZone.y - DROP_PADDING,
+          width:  portalZone.width  + DROP_PADDING * 2,
+          height: portalZone.height + DROP_PADDING * 2,
+    })) {
+      handleRenameDrop(id, type);
       updatePosition(id, rawPos, type);
-    },
-    [trashRect, portalRect, folderRects, updatePosition, moveIntoFolder, parentFolder]
-  );
+      return;
+    }
+
+    // 3) Back-arrow (“go up”)
+    if (backZone && intersects(box, backZone)) {
+      moveIntoFolder(id, parentFolder, type);
+      return;
+    }
+
+    // 4) Any folder
+    for (const zone of folderZones) {
+      // Add this log:
+      if (zone.id === id) continue; // Prevent dropping onto itself
+      console.log('Checking folder drop:', {
+        draggedBox: box,
+        folderZone: zone,
+        intersects: intersects(box, zone),
+        folderId: zone.id,
+      });
+      if (intersects(box, zone)) {
+        moveIntoFolder(id, zone.id, type);
+        return;
+      }
+    }
+
+    // 5) Otherwise just clamp/reposition
+    updatePosition(id, rawPos, type);
+  }, [
+    parentFolder,
+    requestDelete,
+    handleRenameDrop,
+    updatePosition,
+    moveIntoFolder,
+  ]);
+
+
 
   // Visible
   const visibleFolders = folders.filter((f) => f.parentFolderId === currentFolderId);
@@ -590,6 +631,7 @@ export default function MyPostsScreen() {
     width: ICON_SIZE, 
     height: ICON_SIZE 
   }));
+  console.log('folderRects:', folderRects);
 
 
   const styles = StyleSheet.create({ 
@@ -728,7 +770,7 @@ export default function MyPostsScreen() {
                   ? setFolderStack((s) => [...s, item.id])
                   : handlePlayPause(item.audio_url, absoluteIndex)
               }
-              onDragEnd={(id, pos) => handleDragEnd(id, pos, item.type)}
+              onDragEnd={(id, pos) => handleDragEnd(id, pos, item.type, folderRects)}
               onTrashDrop={(id, pos) => requestDelete(id, item.type, pos)}
               onDropOnBack={id => moveIntoFolder(id, parentFolder, item.type)}
               onRenameDrop={handleRenameDrop}
