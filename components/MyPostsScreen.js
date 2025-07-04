@@ -515,7 +515,6 @@ export default function MyPostsScreen() {
         .update({ folder_id: folderId })
         .eq('id', id);
     } else {
-      console.log('Before:', folders.find(f => f.id === id));
       setFolders((f) =>
         f.map((x) =>
           x.id === id ? { ...x, parentFolderId: folderId } : x
@@ -525,9 +524,6 @@ export default function MyPostsScreen() {
         .from('folders')
         .update({ parent_folder_id: folderId })
         .eq('id', id);
-      setTimeout(() => {
-        console.log('After:', folders.find(f => f.id === id));
-      }, 1000);
     }
   };
 
@@ -542,11 +538,10 @@ export default function MyPostsScreen() {
 
   const handleDragEnd = useCallback((id, rawPos, type, folderZones) => {
     // Build the file’s bounding box at its drop position:
-    console.log('handleDragEnd called', { id, rawPos, type });
     const box = {
-      x:      rawPos.x,
-      y:      rawPos.y,
-      width:  ICON_SIZE,
+      x: rawPos.x,
+      y: rawPos.y,
+      width: ICON_SIZE,
       height: ICON_SIZE,
     };
 
@@ -592,15 +587,32 @@ export default function MyPostsScreen() {
 
     // 4) Any folder
     for (const zone of folderZones) {
-      // Add this log:
       if (zone.id === id) continue; // Prevent dropping onto itself
-      console.log('Checking folder drop:', {
+
+      // Calculate overlap area
+      const overlapX = Math.max(0, Math.min(box.x + box.width, zone.x + zone.width) - Math.max(box.x, zone.x));
+      const overlapY = Math.max(0, Math.min(box.y + box.height, zone.y + zone.height) - Math.max(box.y, zone.y));
+      const overlapArea = overlapX * overlapY;
+      const boxArea = box.width * box.height;
+
+      // Require at least 40% overlap (adjust as needed)
+      const overlapRatio = overlapArea / boxArea;
+
+      // Use a lower threshold for posts, higher for folders
+      const threshold = type === 'file' ? 0.3 : 0.7;
+
+      console.log('FOLDER DROP DEBUG:', {
         draggedBox: box,
         folderZone: zone,
-        intersects: intersects(box, zone),
+        overlapArea,
+        overlapRatio,
+        boxArea,
         folderId: zone.id,
+        itemId: id,
       });
-      if (intersects(box, zone)) {
+
+      if (overlapRatio > threshold) {
+        console.log('>>> MOVE INTO FOLDER TRIGGERED', { id, folderId: zone.id, type });
         moveIntoFolder(id, zone.id, type);
         return;
       }
@@ -624,14 +636,14 @@ export default function MyPostsScreen() {
   const visibleItems = [...visibleFolders, ...visiblePosts];
 
   // Drop zones
+  const DROP_ZONE_MARGIN = 16;
   const folderRects = visibleFolders.map((f) => ({ 
     id: f.id, 
-    x: f.position.x, 
-    y: f.position.y, 
-    width: ICON_SIZE, 
-    height: ICON_SIZE 
+    x: f.position.x + DROP_ZONE_MARGIN,
+    y: f.position.y + DROP_ZONE_MARGIN,
+    width: ICON_SIZE - 2 * DROP_ZONE_MARGIN,
+    height: ICON_SIZE - 2 * DROP_ZONE_MARGIN,
   }));
-  console.log('folderRects:', folderRects);
 
 
   const styles = StyleSheet.create({ 
