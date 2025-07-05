@@ -805,21 +805,6 @@ export default function MyPostsScreen() {
             />
           );
         })}
-        {/* Folder Bugs */}
-        {folderRects.map(zone => (
-          <View
-            key={zone.id}
-            style={{
-              position: 'absolute',
-              left:   zone.x,
-              top:    zone.y,
-              width:  zone.width,
-              height: zone.height,
-              borderWidth: 1,
-              borderColor: 'red',
-            }}
-          />
-        ))}
         {/* Trash and Portal Icon */}
         <Image
           ref={trashImageRef}
@@ -831,8 +816,8 @@ export default function MyPostsScreen() {
             position: 'absolute',
             width: ICON_SIZE,
             height: ICON_SIZE,
-            bottom: tabBarHeight,
-            right: TRASH_MARGIN,
+            bottom: tabBarHeight - 15,
+            right: TRASH_MARGIN - 15,
           }}
           resizeMode="contain"
         />
@@ -844,8 +829,8 @@ export default function MyPostsScreen() {
             position: 'absolute',
             width: ICON_SIZE,
             height: ICON_SIZE,
-            bottom: tabBarHeight,
-            left: TRASH_MARGIN,
+            bottom: tabBarHeight - 15,
+            left: TRASH_MARGIN - 15,
           }}
           resizeMode="contain"
         />
