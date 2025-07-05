@@ -537,13 +537,21 @@ export default function MyPostsScreen() {
     !(rect.x === 0 && rect.y === 0);
 
   const handleDragEnd = useCallback((id, rawPos, type, folderZones) => {
+    // coordinate check 
+    console.log('⏺️ RAW POS:', rawPos)
+    console.log('⏺️ DESKTOP OFFSET:', desktopOffset)
+    console.log('⏺️ FOLDER ZONES:', folderZones)
+
     // Build the file’s bounding box at its drop position:
-    const box = {
-      x: rawPos.x,
-      y: rawPos.y,
-      width: ICON_SIZE,
-      height: ICON_SIZE,
-    };
+    const dropX = rawPos.x;
+    const dropY = rawPos.y;
+
+    const box = { x: dropX, y: dropY, width: ICON_SIZE, height: ICON_SIZE };
+
+    console.log('FOLDER DROP DEBUG (local):', {
+      draggedBox: box,
+      folderZones
+    });
 
     const trashZone  = trashRectRef.current;
     const portalZone = portalRectRef.current;
@@ -626,6 +634,7 @@ export default function MyPostsScreen() {
     handleRenameDrop,
     updatePosition,
     moveIntoFolder,
+    desktopOffset,
   ]);
 
 
@@ -639,10 +648,10 @@ export default function MyPostsScreen() {
   const DROP_ZONE_MARGIN = 16;
   const folderRects = visibleFolders.map((f) => ({ 
     id: f.id, 
-    x: f.position.x + DROP_ZONE_MARGIN,
-    y: f.position.y + DROP_ZONE_MARGIN,
-    width: ICON_SIZE - 2 * DROP_ZONE_MARGIN,
-    height: ICON_SIZE - 2 * DROP_ZONE_MARGIN,
+    x: f.position.x,
+    y: f.position.y,
+    width: ICON_SIZE,
+    height: ICON_SIZE,
   }));
 
 
@@ -796,6 +805,21 @@ export default function MyPostsScreen() {
             />
           );
         })}
+        {/* Folder Bugs */}
+        {folderRects.map(zone => (
+          <View
+            key={zone.id}
+            style={{
+              position: 'absolute',
+              left:   zone.x,
+              top:    zone.y,
+              width:  zone.width,
+              height: zone.height,
+              borderWidth: 1,
+              borderColor: 'red',
+            }}
+          />
+        ))}
         {/* Trash and Portal Icon */}
         <Image
           ref={trashImageRef}
