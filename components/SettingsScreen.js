@@ -114,7 +114,7 @@ export default function SettingsScreen() {
         value={dummy}
         onValueChange={setDummy}
         trackColor={{ true: '#FF0000', false: '#00FF00' }}
-        style={{ alignSelf: 'flex-start', marginTop: 8 }}
+        style={styles.switch}
       />
     </View>
   );
