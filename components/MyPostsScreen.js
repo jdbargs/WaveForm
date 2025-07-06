@@ -399,6 +399,9 @@ export default function MyPostsScreen() {
       type,
       value: currentName,
     });
+    if (portalRect) {
+      snapIntoPortal(id, type, portalRect);
+    }
   };
 
   const handleRenameSubmit = async () => {
@@ -412,6 +415,28 @@ export default function MyPostsScreen() {
     }
     setRenamePopup({ visible: false, id: null, type: null, value: '' });
   };
+
+  // 1) Define this helper somewhere in your module:
+  function snapIntoPortal(id, type, portalRect) {
+    // grab the item’s last known position
+    const item = type === 'file'
+      ? posts.find(p => p.id === id)
+      : folders.find(f => f.id === id);
+
+    const fallbackPos = item?.position || { x: 0, y: 0 };
+    const safePos = { x: fallbackPos.x, y: fallbackPos.y };
+
+    // your original math, just swapping trashRect → portalRect
+    let newX = Math.max(0, portalRect.x - ICON_SIZE - 20);
+    let newY = safePos.y;
+
+    if (safePos.x < portalRect.x) {
+      newX = safePos.x;
+      newY = Math.max(0, portalRect.y - ICON_SIZE - 20);
+    }
+
+    updatePosition(id, { x: newX, y: newY }, type);
+  }
 
   // Move & reposition
   const updatePosition = async (id, rawPos, type) => {
@@ -824,7 +849,16 @@ export default function MyPostsScreen() {
         <Image
           ref={portalImageRef}
           source={require('../assets/images/portal.png')}
-          onLayout={e => setPortalRect(e.nativeEvent.layout)}
+          onLayout={({ nativeEvent }) => {
+            const { x, y, width, height } = nativeEvent.layout;
+            // Add the desktop offset so coords become absolute
+            setPortalRect({
+              x: x + desktopOffset.x,
+              y: y + desktopOffset.y,
+              width,
+              height,
+            });
+          }}
           style={{
             position: 'absolute',
             width: ICON_SIZE,
