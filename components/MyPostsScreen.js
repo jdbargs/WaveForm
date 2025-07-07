@@ -56,6 +56,8 @@ export default function MyPostsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const [request, setRequest] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  // new: holds only the last message
+  const [moveLog, setMoveLog] = useState(null);
   const containerHeight = desktopHeight ||
     (WINDOW_HEIGHT - HEADER_HEIGHT - BREADCRUMB_HEIGHT - tabBarHeight);
   const [deleteConfirm, setDeleteConfirm] = useState({
@@ -528,22 +530,33 @@ export default function MyPostsScreen() {
   };
 
   const moveIntoFolder = async (id, folderId, type) => {
-    console.log('Moving', id, 'into folder', folderId, 'type:', type);
+    // 1) look up the two names
+    const item    = type === 'file'
+      ? posts.find(p => p.id === id)
+      : folders.find(f => f.id === id);
+    const dest    = folders.find(f => f.id === folderId);
+    const itemName   = type === 'file' ? item?.caption : item?.name;
+    const folderName = dest?.name || 'Folder';
+
+    const msg = `${itemName} moved into ${folderName}`;
+
+    // show it
+    setMoveLog(msg);
+    // clear after 2s (adjust as you like)
+    setTimeout(() => setMoveLog(null), 2000);
+
+    // 3) now do your existing state + Supabase update
     if (type === 'file') {
-      setPosts((p) =>
-        p.map((x) =>
-          x.id === id ? { ...x, parentFolderId: folderId } : x
-        )
+      setPosts(p =>
+        p.map(x => x.id === id ? { ...x, parentFolderId: folderId } : x)
       );
       await supabase
         .from('posts')
         .update({ folder_id: folderId })
         .eq('id', id);
     } else {
-      setFolders((f) =>
-        f.map((x) =>
-          x.id === id ? { ...x, parentFolderId: folderId } : x
-        )
+      setFolders(f =>
+        f.map(x => x.id === id ? { ...x, parentFolderId: folderId } : x)
       );
       await supabase
         .from('folders')
@@ -551,6 +564,7 @@ export default function MyPostsScreen() {
         .eq('id', id);
     }
   };
+
 
   // inside MyPostsScreen
 
@@ -691,8 +705,32 @@ export default function MyPostsScreen() {
     flex: 1,
     backgroundColor: t.colors.background,
     position: 'relative',
-    paddingBottom: tabBarHeight,   // ← reserve exactly that much space at the bottom
-    }
+    paddingBottom: tabBarHeight,
+    },
+    logContainer: {
+      padding: 8,
+      backgroundColor: t.colors.buttonFace,
+      borderTopWidth: t.border.width,
+      borderTopColor: t.colors.buttonShadow,
+    },
+    logText: {
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.small,
+      color: t.colors.text,  
+    },
+    moveLog: {
+      position: 'absolute',
+      top: HEADER_HEIGHT + BREADCRUMB_HEIGHT + 8,  // tweak vertical offset
+      left: 16,                                   // tweak horizontal offset
+      fontFamily: t.font.family,
+      fontSize: t.font.sizes.small,
+      color: t.colors.text,
+      backgroundColor: 'transparent',
+      // optional: add a light text-shadow for visibility
+      textShadowColor: t.colors.buttonShadow,
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 1,
+    },
   });
 
   return (
@@ -795,6 +833,12 @@ export default function MyPostsScreen() {
           <Win95Button title="Delete" onPress={handleDeleteConfirm} style={{ marginLeft: 8 }} />
         </View>
       </Win95Popup>
+
+      {moveLog && (
+        <Text style={styles.moveLog}>
+          {moveLog}
+        </Text>
+      )}
 
       {/* Desktop icons + debug overlays */}
       <View
