@@ -29,9 +29,9 @@ import Win95Popup from './Win95Popup';
 const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
 const ICON_SIZE = 80;
 const TRASH_MARGIN = 20;
-const HEADER_HEIGHT     = 56;  // whatever your <View style={styles.header}> actually renders at
+const HEADER_HEIGHT = 56;  // whatever your <View style={styles.header}> actually renders at
 const BREADCRUMB_HEIGHT = 48;  // whatever your <View style={styles.breadcrumb}> actually renders at
-const DROP_PADDING = 20;    // how many pixels extra you want around each icon
+const DROP_PADDING = 0;    // how many pixels extra you want around each icon
 const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
 
 
@@ -543,7 +543,7 @@ export default function MyPostsScreen() {
     // show it
     setMoveLog(msg);
     // clear after 2s (adjust as you like)
-    setTimeout(() => setMoveLog(null), 2000);
+    setTimeout(() => setMoveLog(null), 4000);
 
     // 3) now do your existing state + Supabase update
     if (type === 'file') {
@@ -720,16 +720,15 @@ export default function MyPostsScreen() {
     },
     moveLog: {
       position: 'absolute',
-      top: HEADER_HEIGHT + BREADCRUMB_HEIGHT + 8,  // tweak vertical offset
-      left: 16,                                   // tweak horizontal offset
+      left: 16,
       fontFamily: t.font.family,
       fontSize: t.font.sizes.small,
       color: t.colors.text,
       backgroundColor: 'transparent',
-      // optional: add a light text-shadow for visibility
       textShadowColor: t.colors.buttonShadow,
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 1,
+      zIndex: 1000,            // ensure it floats on top
     },
   });
 
@@ -835,7 +834,12 @@ export default function MyPostsScreen() {
       </Win95Popup>
 
       {moveLog && (
-        <Text style={styles.moveLog}>
+        <Text
+          style={[
+            styles.moveLog,
+            { bottom: (tabBarHeight || 0) + 100 }
+          ]}
+        >
           {moveLog}
         </Text>
       )}
