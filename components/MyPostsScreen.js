@@ -16,26 +16,34 @@ import {
   TouchableOpacity,
   Image
 } from 'react-native';
+import {
+  ICON_SIZE,
+  TRASH_MARGIN,
+  HEADER_HEIGHT,
+  BREADCRUMB_HEIGHT,
+  DROP_PADDING,
+  clamp,
+  clampPos,
+  intersects
+} from '../utils/desktopUtils';
+import usePostsAndFolders from '../hooks/usePostsAndFolders';
+import useUserProfile from '../hooks/useUserProfile';
+import useFollowRequests from '../hooks/useFollowRequests';
 import { Audio } from 'expo-av';
 import { supabase } from '../lib/supabase';
-import { useIsFocused, useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme';
 import Win95Button from './Win95Button';
 import DesktopIcon from './DesktopIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import Win95Popup from './Win95Popup';
-
 const { height: WINDOW_HEIGHT, width: WINDOW_WIDTH } = Dimensions.get('window');
-const ICON_SIZE = 80;
-const TRASH_MARGIN = 20;
-const HEADER_HEIGHT = 56;  // whatever your <View style={styles.header}> actually renders at
-const BREADCRUMB_HEIGHT = 48;  // whatever your <View style={styles.breadcrumb}> actually renders at
-const DROP_PADDING = 0;    // how many pixels extra you want around each icon
-const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
-
 
 export default function MyPostsScreen() {
+  const { userId, username, isPrivate, loaded, saveUsername } = useUserProfile();
+  const { request, showPopup, respond, hide } = useFollowRequests(userId);
+  const isFocused = useIsFocused();
   const trashRectRef = useRef(null);
   const portalRectRef = useRef(null);
   const trashImageRef = useRef(null);
@@ -50,12 +58,9 @@ export default function MyPostsScreen() {
   const [upRect, setUpRect] = useState(null);
   const [trashRect, setTrashRect] = useState(null);
   const [portalRect, setPortalRect] = useState(null);
-  const [showPopup, setShowPopup] = useState(false);
   const containerWidth  = WINDOW_WIDTH;
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
-  const [request, setRequest] = useState(null);
-  const [isPrivate, setIsPrivate] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   // new: holds only the last message
   const [moveLog, setMoveLog] = useState(null);
@@ -72,6 +77,21 @@ export default function MyPostsScreen() {
     type: null,
     value: '',
   });
+  const {
+    posts,
+    folders,
+    updatePosition,
+    moveIntoFolder
+  } = usePostsAndFolders(
+    userId,
+    desktopHeight,
+    tabBarHeight,
+    isFocused,
+    desktopOffset,
+    trashRect,
+    portalRect,
+    setMoveLog
+  );
   
   useEffect(() => { trashRectRef.current = trashRect; }, [trashRect]);
   useEffect(() => { portalRectRef.current = portalRect; }, [portalRect]);
@@ -108,23 +128,6 @@ export default function MyPostsScreen() {
     }
   }, [desktopHeight, tabBarHeight, desktopOffset]);
 
-
-  useEffect(() => {
-    if (!desktopHeight) return;
-    setPosts(posts =>
-      posts.map(p => ({
-        ...p,
-        position: clampPos(p.position, desktopHeight, tabBarHeight)
-      }))
-    );
-    setFolders(folders =>
-      folders.map(f => ({
-        ...f,
-        position: clampPos(f.position, desktopHeight, tabBarHeight)
-      }))
-    );
-  }, [desktopHeight, tabBarHeight]);
-
   useEffect(() => {
     if (desktopRef.current) {
       desktopRef.current.measure((x, y, width, height, pageX, pageY) => {
@@ -132,127 +135,6 @@ export default function MyPostsScreen() {
       });
     }
   }, [desktopHeight, tabBarHeight]);
-
-
-  // Auth/profile
-  const [username, setUsername] = useState('');
-  const [userId, setUserId] = useState(null);
-  useEffect(() => {
-    (async () => {
-      const {
-        data: { user },
-        error: userErr
-      } = await supabase.auth.getUser();
-      if (userErr || !user) return console.error(userErr);
-      setUserId(user.id);
-      const { data, error } = await supabase
-        .from('users')
-        .select('username, is_private')
-        .eq('id', user.id)
-        .single();
-      if (!error && data) {
-        setUsername(data.username);
-        setIsPrivate(data.is_private);
-      }
-    })();
-  }, []);
-
-  // load the oldest pending request, if any
-  useEffect(() => {
-    if (!userId) return;
-
-    (async () => {
-      // In your “load pending” effect, replace your .select('*') with:
-      const { data, error } = await supabase
-        .from('follow_requests')
-        .select(`
-          id,
-          follower_id,
-          followed_id,
-          status,
-          created_at,
-          follower:users!follow_requests_follower_id_fkey(
-            username
-          )
-        `)
-        .eq('followed_id', userId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) {
-        console.error('pending-request fetch error', error);
-      } else if (data) {
-        // data.follower.username now holds the username
-        setRequest({
-          ...data,
-          followerUsername: data.follower.username
-        });
-        setShowPopup(true);
-      }
-    })();
-  }, [userId]);
-
-
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel('follow-requests-channel')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'follow_requests', filter: `followed_id=eq.${userId}` },
-        async ({ new: req }) => {
-          // re-query that single row with the join
-          const { data } = await supabase
-            .from('follow_requests')
-            .select(`
-              id,
-              follower_id,
-              followed_id,
-              status,
-              created_at,
-              follower:users!follow_requests_follower_id_fkey(
-                username
-              )
-            `)
-            .eq('id', req.id)
-            .single();
-
-          if (data) {
-            setRequest({
-              ...data,
-              followerUsername: data.follower.username
-            });
-            setShowPopup(true);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, [userId]);
-
-  const clampPos = (pos, desktopHeight, tabBarHeight) => ({
-    x: clamp(pos.x, 0, WINDOW_WIDTH - ICON_SIZE),
-    y: clamp(pos.y, 0, (desktopHeight - tabBarHeight) - ICON_SIZE),
-  });
-
-  const handleUsernameSave = async () => {
-    if (!userId) return;
-    const { error } = await supabase
-      .from('users')
-      .update({ username })
-      .eq('id', userId);
-    if (error) console.error(error);
-  };
-
-  // Posts & folders
-  const [posts, setPosts] = useState([]);
-  const [folders, setFolders] = useState([]);
-  const isFocused = useIsFocused();
 
   const fetchPosts = useCallback(async () => {
     if (!userId) return;
@@ -483,37 +365,6 @@ export default function MyPostsScreen() {
     }
   };
 
-  const respondFollowRequest = async (requestId, approve) => {
-    try {
-      // 1️⃣ Flip the request’s status
-      const { data: updatedReq, error: statusErr } = await supabase
-        .from('follow_requests')
-        .update({ status: approve ? 'accepted' : 'rejected' })
-        .eq('id', requestId)
-        .select()
-        .single();
-      if (statusErr) throw statusErr;
-
-      // 2️⃣ If approved, create the real follow
-      if (approve) {
-        const { error: followErr } = await supabase
-          .from('follows')
-          .insert({
-            follower_id: updatedReq.follower_id,
-            followed_id: updatedReq.followed_id
-          });
-        if (followErr) throw followErr;
-      }
-
-      // 3️⃣ Clear state so popup closes
-      setShowPopup(false);
-      setRequest(null);
-    } catch (e) {
-      console.error('Error responding to follow request:', e);
-    }
-  };
-
-
   const handleRenameSubmit = async () => {
     const { id, type, value } = renamePopup;
     if (type === 'file') {
@@ -548,131 +399,6 @@ export default function MyPostsScreen() {
     updatePosition(id, { x: newX, y: newY }, type);
   }
 
-  // Move & reposition
-  const updatePosition = async (id, rawPos, type) => {
-    // 1) Clamp into desktop bounds
-    const usableHeight = desktopHeight - tabBarHeight;
-    const usableWidth  = WINDOW_WIDTH;
-    if (usableHeight <= 0 || usableWidth <= 0) {
-      console.warn('Skipping updatePosition: desktopHeight or tabBarHeight not set');
-      return;
-    }
-
-    let pos = clampPos(rawPos, desktopHeight, tabBarHeight);
-
-    // 2) Build “forbidden” zones around each drop-icon
-    const forbiddenZones = [];
-    if (isValidRect(trashRect)) {
-      forbiddenZones.push({
-        x: trashRect.x - DROP_PADDING,
-        y: trashRect.y - DROP_PADDING,
-        width:  trashRect.width  + DROP_PADDING * 2,
-        height: trashRect.height + DROP_PADDING * 2,
-      });
-    }
-    if (isValidRect(portalRect)) {
-      forbiddenZones.push({
-        x: portalRect.x - DROP_PADDING,
-        y: portalRect.y - DROP_PADDING,
-        width:  portalRect.width  + DROP_PADDING * 2,
-        height: portalRect.height + DROP_PADDING * 2,
-      });
-    }
-
-    // 3) AABB intersection test
-    const intersects = (a, b) =>
-      a.x < b.x + b.width &&
-      a.x + a.width  > b.x &&
-      a.y < b.y + b.height &&
-      a.y + a.height > b.y;
-
-    const box = {
-      x: rawPos.x - desktopOffset.x,
-      y: rawPos.y - desktopOffset.y,
-      width: ICON_SIZE,
-      height: ICON_SIZE,
-    };
-    let maxTries = 10; // Prevent infinite loops
-
-    // 4) If it collides, push it above that zone
-    // ...existing code...
-    while (maxTries-- > 0) {
-      let collided = false;
-      for (const zone of forbiddenZones) {
-        if (intersects(box, zone)) {
-          console.log('FORBIDDEN ZONE HIT', zone, box);
-          // Try to push below the forbidden zone
-          pos.y = zone.y + zone.height + 1;
-          // If that would go off the bottom, push above
-          if (pos.y + ICON_SIZE > usableHeight) {
-            pos.y = zone.y - ICON_SIZE - 1;
-          }
-          // Clamp to safe area
-          pos.y = clamp(pos.y, HEADER_HEIGHT + BREADCRUMB_HEIGHT, usableHeight - ICON_SIZE);
-          pos.x = clamp(pos.x, 0, usableWidth - ICON_SIZE);
-          // Update box for next check
-          box.y = pos.y;
-          box.x = pos.x;
-          collided = true;
-          break; // Start over, since we moved
-        }
-      }
-      if (!collided) break; // No more collisions, we're safe
-    }
-
-    // ...rest of updatePosition...
-    pos = clampPos(pos, desktopHeight, tabBarHeight);
-
-    // 5) Commit the new “safe” position
-    if (type === 'file') {
-      setPosts(p =>
-        p.map(x => x.id === id ? { ...x, position: pos } : x)
-      );
-      await supabase.from('posts').update({ position: pos }).eq('id', id);
-    } else {
-      setFolders(f =>
-        f.map(x => x.id === id ? { ...x, position: pos } : x)
-      );
-      await supabase.from('folders').update({ position: pos }).eq('id', id);
-    }
-  };
-
-  const moveIntoFolder = async (id, folderId, type) => {
-    // 1) look up the two names
-    const item    = type === 'file'
-      ? posts.find(p => p.id === id)
-      : folders.find(f => f.id === id);
-    const dest    = folders.find(f => f.id === folderId);
-    const itemName   = type === 'file' ? item?.caption : item?.name;
-    const folderName = dest?.name || 'Folder';
-
-    const msg = `${itemName} moved into ${folderName}`;
-
-    // show it
-    setMoveLog(msg);
-    // clear after 2s (adjust as you like)
-    setTimeout(() => setMoveLog(null), 4000);
-
-    // 3) now do your existing state + Supabase update
-    if (type === 'file') {
-      setPosts(p =>
-        p.map(x => x.id === id ? { ...x, parentFolderId: folderId } : x)
-      );
-      await supabase
-        .from('posts')
-        .update({ folder_id: folderId })
-        .eq('id', id);
-    } else {
-      setFolders(f =>
-        f.map(x => x.id === id ? { ...x, parentFolderId: folderId } : x)
-      );
-      await supabase
-        .from('folders')
-        .update({ parent_folder_id: folderId })
-        .eq('id', id);
-    }
-  };
-
   // 1️⃣ build this handler once per render:
   const isValidRect = rect =>
     rect &&
@@ -700,13 +426,6 @@ export default function MyPostsScreen() {
     const trashZone  = trashRectRef.current;
     const portalZone = portalRectRef.current;
     const backZone   = upRectRef.current;
-
-    // A simple intersection test
-    const intersects = (a, b) =>
-      a.x < b.x + b.width &&
-      a.x + a.width  > b.x &&
-      a.y < b.y + b.height &&
-      a.y + a.height > b.y;
 
     // 1) Trash
     if (trashZone && intersects(box, {
@@ -844,8 +563,8 @@ export default function MyPostsScreen() {
         <TextInput
           style={styles.usernameInput}
           value={username}
-          onChangeText={setUsername}
-          onBlur={handleUsernameSave}
+          onChangeText={saveUsername}
+          onBlur={() => saveUsername(username)}
           placeholder="Username"
           placeholderTextColor={t.colors.text}
         />
@@ -903,15 +622,8 @@ export default function MyPostsScreen() {
             {request.followerUsername} wants to follow you.
           </Text>
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <Win95Button
-              title="Accept"
-              onPress={() => respondFollowRequest(request.id, true)}
-            />
-            <Win95Button
-              title="Reject"
-              onPress={() => respondFollowRequest(request.id, false)}
-              style={{ marginLeft: 8 }}
-            />
+            <Win95Button title="Accept" onPress={() => respond(request.id, true)} />
+            <Win95Button title="Reject" onPress={() => respond(request.id, false)} />
           </View>
         </Win95Popup>
       )}

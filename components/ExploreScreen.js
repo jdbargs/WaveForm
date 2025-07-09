@@ -310,7 +310,7 @@ export default function ExploreScreen() {
       <View style={[styles.container, { padding: t.spacing.md }]}>
         <TextInput
           placeholder="Search users..."
-          placeholderTextColor={t.colors.accentBlue}
+          placeholderTextColor={t.colors.background}
           value={searchQuery}
           onChangeText={setSearchQuery}
           style={[

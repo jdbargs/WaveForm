@@ -1,0 +1,144 @@
+OLD AUTH PROFILE USE
+
+  // Auth/profile
+  const [username, setUsername] = useState('');
+  const [userId, setUserId] = useState(null);
+  useEffect(() => {
+    (async () => {
+      const {
+        data: { user },
+        error: userErr
+      } = await supabase.auth.getUser();
+      if (userErr || !user) return console.error(userErr);
+      setUserId(user.id);
+      const { data, error } = await supabase
+        .from('users')
+        .select('username, is_private')
+        .eq('id', user.id)
+        .single();
+      if (!error && data) {
+        setUsername(data.username);
+        setIsPrivate(data.is_private);
+      }
+    })();
+  }, []);
+
+  // load the oldest pending request, if any
+  useEffect(() => {
+    if (!userId) return;
+
+    (async () => {
+      // In your “load pending” effect, replace your .select('*') with:
+      const { data, error } = await supabase
+        .from('follow_requests')
+        .select(`
+          id,
+          follower_id,
+          followed_id,
+          status,
+          created_at,
+          follower:users!follow_requests_follower_id_fkey(
+            username
+          )
+        `)
+        .eq('followed_id', userId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('pending-request fetch error', error);
+      } else if (data) {
+        // data.follower.username now holds the username
+        setRequest({
+          ...data,
+          followerUsername: data.follower.username
+        });
+        setShowPopup(true);
+      }
+    })();
+  }, [userId]);
+
+
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('follow-requests-channel')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'follow_requests', filter: `followed_id=eq.${userId}` },
+        async ({ new: req }) => {
+          // re-query that single row with the join
+          const { data } = await supabase
+            .from('follow_requests')
+            .select(`
+              id,
+              follower_id,
+              followed_id,
+              status,
+              created_at,
+              follower:users!follow_requests_follower_id_fkey(
+                username
+              )
+            `)
+            .eq('id', req.id)
+            .single();
+
+          if (data) {
+            setRequest({
+              ...data,
+              followerUsername: data.follower.username
+            });
+            setShowPopup(true);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [userId]);
+
+  const handleUsernameSave = async () => {
+    if (!userId) return;
+    const { error } = await supabase
+      .from('users')
+      .update({ username })
+      .eq('id', userId);
+    if (error) console.error(error);
+  };
+
+
+OLD FOLLOW REQUEST
+
+const respondFollowRequest = async (requestId, approve) => {
+    try {
+      // 1️⃣ Flip the request’s status
+      const { data: updatedReq, error: statusErr } = await supabase
+        .from('follow_requests')
+        .update({ status: approve ? 'accepted' : 'rejected' })
+        .eq('id', requestId)
+        .select()
+        .single();
+      if (statusErr) throw statusErr;
+
+      // 2️⃣ If approved, create the real follow
+      if (approve) {
+        const { error: followErr } = await supabase
+          .from('follows')
+          .insert({
+            follower_id: updatedReq.follower_id,
+            followed_id: updatedReq.followed_id
+          });
+        if (followErr) throw followErr;
+      }
+
+      // 3️⃣ Clear state so popup closes
+      setShowPopup(false);
+      setRequest(null);
+    } catch (e) {
+      console.error('Error responding to follow request:', e);
+    }
+  };

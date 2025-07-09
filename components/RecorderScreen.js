@@ -326,7 +326,7 @@ export default function RecorderScreen() {
           value={postName}
           onChangeText={setPostName}
           style={styles.input}
-          placeholderTextColor={t.colors.primary}
+          placeholderTextColor={t.colors.background}
         />
         <Win95Button
           title={isRecording ? 'Stop' : 'Record'}

@@ -86,7 +86,7 @@ export default function AuthScreen() {
         <TextInput
           style={styles.input}
           placeholder="Email"
-          placeholderTextColor={t.colors.accentBlue}
+          placeholderTextColor={t.colors.background}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -95,7 +95,7 @@ export default function AuthScreen() {
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor={t.colors.accentBlue}
+          placeholderTextColor={t.colors.background}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
