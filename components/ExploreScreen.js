@@ -30,6 +30,7 @@ export default function ExploreScreen() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [followingIds, setFollowingIds] = useState(new Set());
   const focusTimestampRef = useRef(0);
+  const [pendingIds, setPendingIds] = useState(new Set());
 
 
   // Popular posts state
@@ -81,73 +82,6 @@ export default function ExploreScreen() {
     [searchQuery, isFocused, currentUserId, playingIndex]
   );
 
-  useEffect(() => { postsRef.current = posts; }, [posts]);
-  useEffect(() => { Audio.setAudioModeAsync({ playsInSilentModeIOS: true }); }, []);
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setCurrentUserId(user.id);
-      const { data: followData } = await supabase
-        .from('follows')
-        .select('followed_id')
-        .eq('follower_id', user.id);
-      setFollowingIds(new Set(followData.map(f => f.followed_id)));
-    })();
-  }, [isFocused]);
-  useEffect(() => {
-    if (!isFocused) {
-      unloadSound();
-      setPlayingIndex(null);
-    }
-  }, [isFocused]);
-
-  // Search users
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (!q) { setUsers([]); return; }
-    setLoadingUsers(true);
-    const timer = setTimeout(async () => {
-      let query = supabase
-        .from('users')
-        .select('id, username, email')
-        .or(`username.ilike.%${q}%,email.ilike.%${q}%`)
-        .limit(50);
-      if (currentUserId) query = query.neq('id', currentUserId);
-      const { data, error } = await query;
-      if (!error && data) setUsers(data);
-      setLoadingUsers(false);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery, currentUserId]);
-
-  useEffect(() => {
-  if (isFocused) {
-    // record when we just became focused
-    focusTimestampRef.current = Date.now();
-  } else {
-    // immediate hard cutoff on blur
-    unloadSound();
-    setPlayingIndex(null);
-  }
-}, [isFocused]);
-
-
-  // Follow/unfollow
-  const handleFollowToggle = async (id) => {
-    if (!currentUserId) return;
-    if (followingIds.has(id)) {
-      await unfollowUser(currentUserId, id);
-      const s = new Set(followingIds); s.delete(id);
-      setFollowingIds(s);
-    } else {
-      await followUser(currentUserId, id);
-      const s = new Set(followingIds); s.add(id);
-      setFollowingIds(s);
-    }
-  };
-
-  // Fetch popular posts (include name + created_at)
   const fetchPopularPosts = useCallback(async () => {
     setLoadingPosts(true);
     const { data, error } = await supabase
@@ -163,22 +97,140 @@ export default function ExploreScreen() {
           is_private
         )
       `)
-      .order('view_count', { ascending: false })
       .eq('is_public', true)
-      .eq('author.is_private', false)
+      // you can filter out private authors here client-side if you like:
+      //.eq('users.is_private', false)
+      .order('view_count', { ascending: false })
       .limit(100);
 
-    if (error) console.error(error);
+    if (error) console.error('fetchPopularPosts error', error);
     setPosts(data || []);
     setLoadingPosts(false);
   }, []);
 
+
+  useEffect(() => { postsRef.current = posts; }, [posts]);
+  useEffect(() => { Audio.setAudioModeAsync({ playsInSilentModeIOS: true }); }, []);
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      fetchPopularPosts();
-      return unloadSound;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setCurrentUserId(user.id);
+      const { data: followData } = await supabase
+        .from('follows')
+        .select('followed_id')
+        .eq('follower_id', user.id);
+      setFollowingIds(new Set(followData.map(f => f.followed_id)));
+
+      const { data: reqData } = await supabase
+        .from('follow_requests')
+        .select('followed_id')
+        .eq('follower_id', user.id)
+        .eq('status', 'pending');
+      setPendingIds(new Set(reqData.map(r => r.followed_id)));
+    })();
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      unloadSound();
+      setPlayingIndex(null);
     }
-  }, [isFocused, searchQuery, fetchPopularPosts]);
+  }, [isFocused]);
+
+  // Search users
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) { setUsers([]); return; }
+    setLoadingUsers(true);
+    const timer = setTimeout(async () => {
+      let query = supabase
+        .from('users')
+        .select('id, username, email, is_private')
+        .or(`username.ilike.%${q}%,email.ilike.%${q}%`)
+        .limit(50);
+      if (currentUserId) query = query.neq('id', currentUserId);
+      const { data, error } = await query;
+      if (!error && data) setUsers(data);
+      setLoadingUsers(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, currentUserId]);
+
+  useEffect(() => {
+    // only load top posts when the list isn’t in “search” mode
+    if (!searchQuery.trim() && isFocused) {
+      fetchPopularPosts();
+      return () => {
+        // cleanup audio when unmounting or losing focus
+        unloadSound();
+        setPlayingIndex(null);
+      };
+    }
+  }, [searchQuery, isFocused, fetchPopularPosts]);
+
+
+  useEffect(() => {
+  if (isFocused) {
+    // record when we just became focused
+    focusTimestampRef.current = Date.now();
+  } else {
+    // immediate hard cutoff on blur
+    unloadSound();
+    setPlayingIndex(null);
+  }
+}, [isFocused]);
+
+
+  // Follow/unfollow
+  const handleFollowToggle = async (item) => {
+    if (!currentUserId) return;
+    const id = item.id;
+
+    // 1) If already following → unfollow
+    if (followingIds.has(id)) {
+      await unfollowUser(currentUserId, id);
+      setFollowingIds(prev => {
+        const s = new Set(prev);
+        s.delete(id);
+        return s;
+      });
+      return;
+    }
+
+    // 2) If target is private → send a follow_request (once)
+    if (item.is_private) {
+      if (pendingIds.has(id)) return; // already requested
+
+      const { error } = await supabase
+        .from('follow_requests')
+        .insert({
+          follower_id: currentUserId,
+          followed_id: id,
+          status: 'pending'
+        });
+
+      if (error) {
+        console.error('Follow-request error:', error);
+        return;
+      }
+
+      setPendingIds(prev => {
+        const s = new Set(prev);
+        s.add(id);
+        return s;
+      });
+      return;
+    }
+
+    // 3) Otherwise it’s a public user → normal follow
+    await followUser(currentUserId, id);
+    setFollowingIds(prev => {
+      const s = new Set(prev);
+      s.add(id);
+      return s;
+    });
+  };
 
   // Audio controls
   async function unloadSound() {
@@ -222,8 +274,15 @@ export default function ExploreScreen() {
         </Text>
       </View>
       <Win95Button
-        title={followingIds.has(item.id) ? 'Unfollow' : 'Follow'}
-        onPress={() => handleFollowToggle(item.id)}
+        title={
+          followingIds.has(item.id)
+            ? 'Unfollow'
+            : pendingIds.has(item.id)
+              ? 'Pending'
+              : 'Follow'
+        }
+        onPress={() => handleFollowToggle(item)}
+        disabled={pendingIds.has(item.id)}
       />
     </View>
   );

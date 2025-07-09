@@ -55,6 +55,7 @@ export default function MyPostsScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const [request, setRequest] = useState(null);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   // new: holds only the last message
   const [moveLog, setMoveLog] = useState(null);
@@ -77,11 +78,6 @@ export default function MyPostsScreen() {
   useEffect(() => { folderRectsRef.current = folderRects; }, [folderRects]);
   useEffect(() => { upRectRef.current = upRect; }, [upRect]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setShowPopup(true);
-    }, [])
-  );
   // Tab title
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -151,12 +147,93 @@ export default function MyPostsScreen() {
       setUserId(user.id);
       const { data, error } = await supabase
         .from('users')
-        .select('username')
+        .select('username, is_private')
         .eq('id', user.id)
         .single();
-      if (!error) setUsername(data.username);
+      if (!error && data) {
+        setUsername(data.username);
+        setIsPrivate(data.is_private);
+      }
     })();
   }, []);
+
+  // load the oldest pending request, if any
+  useEffect(() => {
+    if (!userId) return;
+
+    (async () => {
+      // In your “load pending” effect, replace your .select('*') with:
+      const { data, error } = await supabase
+        .from('follow_requests')
+        .select(`
+          id,
+          follower_id,
+          followed_id,
+          status,
+          created_at,
+          follower:users!follow_requests_follower_id_fkey(
+            username
+          )
+        `)
+        .eq('followed_id', userId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('pending-request fetch error', error);
+      } else if (data) {
+        // data.follower.username now holds the username
+        setRequest({
+          ...data,
+          followerUsername: data.follower.username
+        });
+        setShowPopup(true);
+      }
+    })();
+  }, [userId]);
+
+
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel('follow-requests-channel')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'follow_requests', filter: `followed_id=eq.${userId}` },
+        async ({ new: req }) => {
+          // re-query that single row with the join
+          const { data } = await supabase
+            .from('follow_requests')
+            .select(`
+              id,
+              follower_id,
+              followed_id,
+              status,
+              created_at,
+              follower:users!follow_requests_follower_id_fkey(
+                username
+              )
+            `)
+            .eq('id', req.id)
+            .single();
+
+          if (data) {
+            setRequest({
+              ...data,
+              followerUsername: data.follower.username
+            });
+            setShowPopup(true);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [userId]);
 
   const clampPos = (pos, desktopHeight, tabBarHeight) => ({
     x: clamp(pos.x, 0, WINDOW_WIDTH - ICON_SIZE),
@@ -406,6 +483,37 @@ export default function MyPostsScreen() {
     }
   };
 
+  const respondFollowRequest = async (requestId, approve) => {
+    try {
+      // 1️⃣ Flip the request’s status
+      const { data: updatedReq, error: statusErr } = await supabase
+        .from('follow_requests')
+        .update({ status: approve ? 'accepted' : 'rejected' })
+        .eq('id', requestId)
+        .select()
+        .single();
+      if (statusErr) throw statusErr;
+
+      // 2️⃣ If approved, create the real follow
+      if (approve) {
+        const { error: followErr } = await supabase
+          .from('follows')
+          .insert({
+            follower_id: updatedReq.follower_id,
+            followed_id: updatedReq.followed_id
+          });
+        if (followErr) throw followErr;
+      }
+
+      // 3️⃣ Clear state so popup closes
+      setShowPopup(false);
+      setRequest(null);
+    } catch (e) {
+      console.error('Error responding to follow request:', e);
+    }
+  };
+
+
   const handleRenameSubmit = async () => {
     const { id, type, value } = renamePopup;
     if (type === 'file') {
@@ -564,9 +672,6 @@ export default function MyPostsScreen() {
         .eq('id', id);
     }
   };
-
-
-  // inside MyPostsScreen
 
   // 1️⃣ build this handler once per render:
   const isValidRect = rect =>
@@ -788,17 +893,29 @@ export default function MyPostsScreen() {
       </View>
 
       {/* Follow request popup */}
-      {request && (
+      {request && showPopup && (
         <Win95Popup
-          visible={true}
+          visible
           title="New Follow Request"
-          onClose={() => setPopupVisible(false)}
+          onClose={() => setShowPopup(false)}
         >
-          <Text>{request.follower_id} wants to follow you.</Text>
-          <Button onPress={() => respondFollowRequest(request.id, true)}>Accept</Button>
-          <Button onPress={() => respondFollowRequest(request.id, false)}>Reject</Button>
+          <Text style={{ marginBottom: 12 }}>
+            {request.followerUsername} wants to follow you.
+          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <Win95Button
+              title="Accept"
+              onPress={() => respondFollowRequest(request.id, true)}
+            />
+            <Win95Button
+              title="Reject"
+              onPress={() => respondFollowRequest(request.id, false)}
+              style={{ marginLeft: 8 }}
+            />
+          </View>
         </Win95Popup>
       )}
+
 
       {/* Rename popup */}
       <Win95Popup
